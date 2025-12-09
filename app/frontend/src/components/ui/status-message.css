@@ -1,14 +1,44 @@
+.listening-equalizer {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    width: 2rem;
+    height: 1.75rem;
+    margin-top: 0.5rem;
+}
+
+.listening-equalizer .bar {
+    width: 0.3rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #ff671f, #e3007f);
+    animation: barHeight1 1s ease-in-out infinite;
+    opacity: 0.9;
+}
+
+.listening-equalizer .bar-1 {
+    animation-name: barHeight1;
+}
+
+.listening-equalizer .bar-2 {
+    animation-name: barHeight2;
+}
+
+.listening-equalizer .bar-3,
+.listening-equalizer .bar-4 {
+    animation-name: barHeight3;
+}
+
 @keyframes barHeight1 {
-    0%, 100% { height: 20%; }
-    50% { height: 80%; }
+    0%, 100% { height: 25%; }
+    50% { height: 90%; }
 }
 
 @keyframes barHeight2 {
     0%, 100% { height: 40%; }
-    50% { height: 60%; }
+    50% { height: 70%; }
 }
 
 @keyframes barHeight3 {
     0%, 100% { height: 60%; }
-    50% { height: 40%; }
+    50% { height: 45%; }
 }

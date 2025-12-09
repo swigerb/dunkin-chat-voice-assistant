@@ -1,14 +1,14 @@
-# Coffee Chat Voice Assistant
+# Dunkin Voice Chat Assistant
 
-Coffee Chat Voice Assistant is an advanced, voice-driven ordering system leveraging Azure OpenAI GPT-4o Realtime API to recreate the authentic experience of ordering coffee from a friendly café barista. This system provides natural conversations to deliver engaging and intuitive responses, ensuring a seamless and enjoyable user experience. With real-time transcription, every spoken word is captured and displayed, ensuring clarity and accessibility.
+Dunkin Voice Chat Assistant is an Inspire Brands–themed, voice-driven ordering experience that showcases Microsoft best practices for Azure OpenAI GPT-4o Realtime, Azure AI Search, and Azure Container Apps. The experience emulates a Dunkin crew member who can search the official menu, hold multilingual conversations, and keep orders in sync across devices.
 
-As users place their orders, live updates are dynamically reflected on the screen, allowing them to see their selections build in real time. By simulating a true-to-life customer interaction, Coffee Chat Voice Assistant highlights the transformative potential of AI to enhance convenience and personalize the customer experience, creating a uniquely interactive and intuitive journey, adaptable for various industries and scenarios.
+As guests speak, real-time transcription, translation, and order management provide a transparent view of every choice...from signature lattes to bakery classics. The UI applies Dunkin's vibrant design language so stakeholders can picture how voice AI augments drive-thru, curbside, and kiosk flows.
 
-Beyond coffee enthusiasts, this technology can enhance accessibility and inclusivity, providing a hands-free, voice-driven experience for retail, hospitality, transportation, and more. Whether ordering on-the-go in a car, placing a contactless order from home, or supporting users with mobility challenges, this assistant demonstrates the limitless potential of AI-driven solutions for seamless user interactions.
+Beyond coffee fans, this sample demonstrates how Microsoft’s Responsible AI guidance plus Azure-first tooling enable inclusive, hands-free interactions for franchise teams, accessibility scenarios, and mixed fleet deployments across the Inspire Brands portfolio.
 
 ## Table of Contents
 
-- [Coffee Chat Voice Assistant](#coffee-chat-voice-assistant)
+- [Dunkin Voice Chat Assistant](#dunkin-voice-chat-assistant)
   - [Table of Contents](#table-of-contents)
   - [Acknowledgment](#acknowledgment)
   - [Visual Demonstrations](#visual-demonstrations)
@@ -23,9 +23,9 @@ Beyond coffee enthusiasts, this technology can enhance accessibility and inclusi
     - [Local environment](#local-environment)
   - [Ingesting Menu Items into Azure AI Search](#ingesting-menu-items-into-azure-ai-search)
     - [From JSON](#from-json)
-      - [Steps:](#steps)
+      - [Steps (JSON)](#steps-json)
     - [From PDF](#from-pdf)
-      - [Steps:](#steps-1)
+      - [Steps (PDF)](#steps-pdf)
   - [Running the App Locally](#running-the-app-locally)
     - [Option 1: Direct Local Execution (Recommended for Development)](#option-1-direct-local-execution-recommended-for-development)
     - [Option 2: Docker-based Local Execution](#option-2-docker-based-local-execution)
@@ -35,48 +35,22 @@ Beyond coffee enthusiasts, this technology can enhance accessibility and inclusi
 
 ## Acknowledgment
 
-This project builds upon the [VoiceRAG Repository](https://github.com/Azure-Samples/aisearch-openai-rag-audio): an example of how to implement RAG support in applications that use voice as their user interface, powered by the GPT-4o realtime API for audio. The pattern is described in more detail in this [blog post](https://aka.ms/voicerag), and you can see this sample app in action in this [short video](https://youtu.be/vXJka8xZ9Ko). For the Voice RAG README, see [voice_rag_README.md](voice_rag_README.md)."
+This project extends the [VoiceRAG Repository](https://github.com/Azure-Samples/aisearch-openai-rag-audio), adapting its Microsoft-first architecture for a Dunkin scenario. Review the original pattern in this [blog post](https://aka.ms/voicerag). For the upstream README, see [voice_rag_README.md](voice_rag_README.md).
+
+Special thanks to [John Carroll](https://github.com/john-carroll-sw) for the original [coffee-chat-voice-assistant](https://github.com/john-carroll-sw/coffee-chat-voice-assistant) that inspired this sample. This fork updates to the latest OpenAI models and stirs in a few extra flavors—call it my own brew of the solution.
 
 ## Visual Demonstrations
 
 ![app screenshot](docs/Demo/DesktopViewPreloadedData.png)
 
-### Desktop 4 Minute Interaction Big Order Demo  
-
-This video showcases a 4-minute interaction where a user places a large order using the Coffee Chat Voice Assistant.  
-
-![Desktop 4 Minute Interaction Big Order Demo](docs/Demo/Desktop4MinuteInteractionBigOrder_preview.gif)
-
-[Watch the full video with audio](https://raw.githubusercontent.com/john-carroll-sw/coffee-chat-voice-assistant/main/docs/Demo/Desktop4MinuteInteractionBigOrder_smaller.mp4)  
-
----  
-
-### Mobile Multilingual Ordering Demo  
-
-This video demonstrates the multilingual ordering capabilities of the Coffee Chat Voice Assistant.  
-
-![Mobile Multilingual Ordering Demo](docs/Demo/MultilingualOrdering_preview.gif)
-
-[Watch the full video with audio](https://raw.githubusercontent.com/john-carroll-sw/coffee-chat-voice-assistant/main/docs/Demo/MultilingualOrdering_smaller.mp4)  
-
----  
-
-### UI Elements Walkthrough  
-
-This video provides a walkthrough of the various UI elements in the Coffee Chat Voice Assistant.  
-
-![UI Elements Walkthrough](docs/Demo/UIElementsWalkThrough_preview.gif)
-
-[Watch the full video with audio](https://raw.githubusercontent.com/john-carroll-sw/coffee-chat-voice-assistant/main/docs/Demo/UIElementsWalkThrough_smaller.mp4)
-
-
 ## Features
 
-- **Voice Interface**: Speak naturally to the app, and it processes your voice input in real-time using a flexible backend that supports various voice-to-text and processing services.
-- **Retrieval-Augmented Generation (RAG)**: Leverages knowledge bases to ground responses in relevant and contextual information, such as menu-based ordering.
-- **Real-Time Transcription**: Captures spoken input and provides clear, on-screen text transcriptions for transparency and accessibility.
-- **Live Order Updates**: Dynamically displays order changes during the conversation by integrating advanced function-calling capabilities.
-- **Audio Output**: Converts generated responses into human-like speech, with the app playing audio output through the browser's audio capabilities for seamless hands-free interactions.
+- **Dunkin-specific conversational AI**: GPT-4o Realtime is constrained to verified menu data through Azure AI Search so it always sounds like a Dunkin crew member.
+- **Retrieval-Augmented Generation (RAG)**: Azure OpenAI tool-calling plus semantic hybrid search keep recommendations grounded with pricing, nutrition, and add-on guidance.
+- **Real-Time Transcription + Translation**: Multilingual guests receive accurate transcripts in their language of choice with instant pivots between English, Spanish, Mandarin, French, and more.
+- **Live Order Synchronization**: Function calls update the shared cart so kiosk screens, mobile devices, and drive-thru headsets stay aligned without race conditions.
+- **Audio Output + Accessibility**: Browser audio playback mirrors what a guest would hear over drive-thru speakers, supporting screenless or low-vision ordering.
+- **Durable Session Tokens**: Every realtime conversation emits a session token plus per-turn identifiers so transcripts can map back to telemetry, QA findings, or Azure logs.
 
 ### Architecture Diagram
 
@@ -92,47 +66,38 @@ You have a few options for getting started with this template. The quickest way 
 
 ### GitHub Codespaces
 
-You can run this repo virtually by using GitHub Codespaces, which will open a web-based VS Code in your browser:
+You can run this repo virtually by using GitHub Codespaces, which opens a web-based VS Code in your browser:
 
-[![Open in GitHub Codespaces](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub+Codespaces&message=Open&color=brightgreen&logo=github)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&skip_quickstart=true&machine=basicLinux32gb&repo=860141324&devcontainer_path=.devcontainer%2Fdevcontainer.json&geo=WestUs2)
-
-Once the codespace opens (this may take several minutes), open a new terminal and proceed to [deploy the app](#deploying-the-app).
+1. In your forked GitHub repository, select **Code ➜ Codespaces ➜ Create codespace on main**.
+2. Choose a machine type with at least 8 cores (the 32 GB option provides the smoothest dev experience).
+3. After the container finishes provisioning, open a new terminal and proceed to [deploying the app](#deploying-to-azure).
 
 ### VS Code Dev Containers
 
 You can run the project in your local VS Code Dev Container using the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers):
 
-1. Start Docker Desktop (install it if not already installed)
-2. Open the project:
-
-    [![Open in Dev Containers](https://img.shields.io/static/v1?style=for-the-badge&label=Dev%20Containers&message=Open&color=blue&logo=visualstudiocode)](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/john-carroll-sw/coffee-chat-voice-assistant)
-3. In the VS Code window that opens, once the project files show up (this may take several minutes), open a new terminal, and proceed to [deploying the app](#deploying-the-app).
+1. Start Docker Desktop (install it if not already installed).
+2. Clone your GitHub repository locally (see [Local environment](#local-environment)).
+3. Open the folder in VS Code and choose **Reopen in Container** when prompted (or run the **Dev Containers: Reopen in Container** command).
+4. After the container finishes building, open a new terminal and proceed to [deploying the app](#deploying-to-azure).
 
 ### Local environment
 
 1. Install the required tools by running the prerequisites script:
-   ```bash
-   # Make the script executable
-   chmod +x ./scripts/install_prerequisites.sh
+
+  ```bash
+  # Make the script executable
+  chmod +x ./scripts/install_prerequisites.sh
    
-   # Run the script
-   ./scripts/install_prerequisites.sh
-   ```
+  # Run the script
+  ./scripts/install_prerequisites.sh
+  ```
 
-   The script will install:
-   * Azure CLI tools
-   * Log you into Azure
-   * Check for Docker and prompt for installation if needed
+  The script installs the Azure CLI, signs you in, and verifies Docker availability for you.
 
-   Alternatively, you can manually install:
-   * [Azure Developer CLI](https://aka.ms/azure-dev/install)
-   * [Node.js](https://nodejs.org/)
-   * [Python >=3.11](https://www.python.org/downloads/)
-   * [Git](https://git-scm.com/downloads)
-   * [Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-2. Clone the repo (`git clone https://github.com/john-carroll-sw/coffee-chat-voice-assistant`)
-3. Proceed to the next section to [deploy the app](#deploying-the-app).
+  Alternatively, manually install [Azure Developer CLI](https://aka.ms/azure-dev/install), [Node.js](https://nodejs.org/), [Python >=3.11](https://www.python.org/downloads/), [Git](https://git-scm.com/downloads), and [Docker Desktop](https://www.docker.com/products/docker-desktop).
+  2. Clone your GitHub repository (`git clone https://github.com/swigerb/dunkin-chat-voice-assistant.git`)
+  3. Proceed to the next section to [deploy the app](#deploying-to-azure).
 
 ## Ingesting Menu Items into Azure AI Search
 
@@ -140,7 +105,7 @@ You can run the project in your local VS Code Dev Container using the [Dev Conta
 
 If you have a JSON file containing the menu items for your café, you can use the provided Jupyter notebook to ingest the data into Azure AI Search.
 
-#### Steps:
+#### Steps (JSON)
 
 1. Open the `menu_ingestion_search_json.ipynb` notebook.
 2. Follow the instructions to configure Azure OpenAI and Azure AI Search services.
@@ -155,7 +120,7 @@ This notebook demonstrates how to configure Azure OpenAI and Azure AI Search ser
 
 If you have a PDF file of a café's menu that you would like to use, you can use the provided Jupyter notebook to extract text from the PDF, parse it into structured JSON format, and ingest the data into Azure AI Search.
 
-#### Steps:
+#### Steps (PDF)
 
 1. Open the `menu_ingestion_search_pdf.ipynb` notebook.
 2. Follow the instructions to extract text from the PDF using OCR.
@@ -275,20 +240,35 @@ To deploy the app to a production environment in Azure:
 
 4. After deployment completes, your app will be available at the URL displayed in the console.
 
+## License
+
+This project is licensed under the [MIT License](LICENSE). You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, provided that the copyright notice and permission notice from the MIT License are included in all copies or substantial portions of the software. Refer to the [LICENSE](LICENSE) file for the complete terms.
+
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
+Contributions are welcome! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup, branching guidance, and the pre-flight test checklist before opening an issue or submitting a pull request.
+
+## Disclaimer
+All trademarks and brand references belong to their respective owners.
+
+The diagrams, images, and code samples in this repository are provided **AS IS** for **proof-of-concept and pilot purposes only** and are **not intended for production use**.
+
+These materials are provided without warranty of any kind and **do not constitute an offer, commitment, or support obligation** on the part of Microsoft. Microsoft does not guarantee the accuracy or completeness of any information contained herein.
+
+**MICROSOFT MAKES NO WARRANTIES, EXPRESS OR IMPLIED**, including but not limited to warranties of merchantability, fitness for a particular purpose, or non-infringement.
+
+Use of these materials is at your own risk.
 
 ## Resources
 
 - [OpenAI Realtime API Documentation](https://platform.openai.com/docs/guides/realtime)
-- [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
-- [Azure AI Services Documentation](https://learn.microsoft.com/en-us/azure/cognitive-services/)
-- [Azure AI Search Documentation](https://learn.microsoft.com/en-us/azure/search/)
-- [Azure AI Services Tutorials](https://learn.microsoft.com/en-us/training/paths/azure-ai-fundamentals/)
+- [Azure OpenAI Documentation](https://learn.microsoft.com/azure/ai-services/openai/)
+- [Azure AI Services Documentation](https://learn.microsoft.com/azure/cognitive-services/)
+- [Azure AI Search Documentation](https://learn.microsoft.com/azure/search/)
+- [Azure AI Services Tutorials](https://learn.microsoft.com/training/paths/azure-ai-fundamentals/)
 - [Azure AI Community Support](https://techcommunity.microsoft.com/t5/azure-ai/ct-p/AzureAI)
 - [Azure AI GitHub Samples](https://github.com/Azure-Samples)
-- [Azure AI Services API Reference](https://learn.microsoft.com/en-us/rest/api/cognitiveservices/)
-- [Azure AI Services Pricing](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/)
-- [Azure Developer CLI Documentation](https://learn.microsoft.com/en-us/azure/developer/azure-developer-cli/)
+- [Azure AI Services API Reference](https://learn.microsoft.com/rest/api/cognitiveservices/)
+- [Azure AI Services Pricing](https://azure.microsoft.com/pricing/details/cognitive-services/)
+- [Azure Developer CLI Documentation](https://learn.microsoft.com/azure/developer/azure-developer-cli/)
 - [Azure Developer CLI GitHub Repository](https://github.com/Azure/azure-dev)

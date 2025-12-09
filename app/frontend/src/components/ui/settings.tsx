@@ -11,9 +11,11 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 interface SettingsProps {
     isMobile: boolean;
+    showSessionTokens: boolean;
+    onShowSessionTokensChange: (checked: boolean) => void;
 }
 
-export default function Settings({ isMobile }: SettingsProps) {
+export default function Settings({ isMobile, showSessionTokens, onShowSessionTokensChange }: SettingsProps) {
     const [isDarkMode, setIsDarkMode] = useState(() => {
         return localStorage.getItem("isDarkMode") === "true";
     });
@@ -39,6 +41,10 @@ export default function Settings({ isMobile }: SettingsProps) {
 
     const handleDummyDataChange = (checked: boolean) => {
         setUseDummyData(checked);
+    };
+
+    const handleSessionTokensChange = (checked: boolean) => {
+        onShowSessionTokensChange(checked);
     };
 
     const SettingsContent = () => (
@@ -89,6 +95,23 @@ export default function Settings({ isMobile }: SettingsProps) {
                 <div className="ml-4 flex flex-col items-end">
                     <Switch id="dummy-data" checked={useDummyData} onCheckedChange={handleDummyDataChange} aria-label="Toggle dummy data" />
                     <span className="text-xs text-gray-500 dark:text-gray-400">{useDummyData ? "Dummy Data" : "Real Data"}</span>
+                </div>
+            </div>
+            <div className="flex items-start justify-between">
+                <div className="flex-1 space-y-0.5">
+                    <Label htmlFor="session-token-visibility" className="text-gray-900 dark:text-gray-100">
+                        Show Session Tokens
+                    </Label>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Toggle visibility of session token and round-trip IDs</p>
+                </div>
+                <div className="ml-4 flex flex-col items-end">
+                    <Switch
+                        id="session-token-visibility"
+                        checked={showSessionTokens}
+                        onCheckedChange={handleSessionTokensChange}
+                        aria-label="Toggle session token visibility"
+                    />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{showSessionTokens ? "Visible" : "Hidden"}</span>
                 </div>
             </div>
         </div>

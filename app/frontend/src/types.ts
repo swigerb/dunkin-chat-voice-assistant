@@ -79,8 +79,22 @@ export type ResponseDone = {
 
 // Represents a response from an extension middle tier tool
 export type ExtensionMiddleTierToolResponse = {
-    type: "extension.middle_tier_tool.response";
+    type: "extension.middle_tier_tool_response";
     previous_item_id: string;
     tool_name: string;
     tool_result: string; // JSON string that needs to be parsed into ToolResult
+};
+
+export type ExtensionSessionMetadata = {
+    type: "extension.session_metadata";
+    sessionToken: string;
+    roundTripIndex: number;
+    roundTripToken: string;
+};
+
+export type ExtensionRoundTripToken = {
+    type: "extension.round_trip_token";
+    sessionToken: string;
+    roundTripIndex: number;
+    roundTripToken: string;
 };

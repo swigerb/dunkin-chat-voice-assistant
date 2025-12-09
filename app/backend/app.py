@@ -9,22 +9,34 @@ from dotenv import load_dotenv
 
 from tools import attach_tools_rtmt
 from rtmt import RTMiddleTier
-from azurespeech import AzureSpeech
+
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("voicerag")
+logger = logging.getLogger(__name__)
 
-# Load environment variables from .env file
 load_dotenv()
 
-# Create the web application
+
+def _get_bool_env(variable_name: str, default: bool = False) -> bool:
+    """Parse boolean environment variables with predictable defaults."""
+    value = os.environ.get(variable_name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 async def create_app():
+    """Configure and return the aiohttp application for realtime ordering."""
+
     if not os.environ.get("RUNNING_IN_PRODUCTION"):
-        logger.info("Running in development mode, loading from .env file")
+        logger.info("Running in development mode; refreshing values from .env")
         load_dotenv()
-    
+
     llm_endpoint = os.environ.get("AZURE_OPENAI_EASTUS2_ENDPOINT")
     llm_deployment = os.environ.get("AZURE_OPENAI_REALTIME_DEPLOYMENT")
+    if not llm_endpoint or not llm_deployment:
+        raise RuntimeError("Azure OpenAI realtime endpoint and deployment must be configured.")
+
     llm_key = os.environ.get("AZURE_OPENAI_EASTUS2_API_KEY")
     search_key = os.environ.get("AZURE_SEARCH_API_KEY")
 
@@ -36,9 +48,10 @@ async def create_app():
         else:
             logger.info("Using DefaultAzureCredential")
             credential = DefaultAzureCredential()
+
     llm_credential = AzureKeyCredential(llm_key) if llm_key else credential
     search_credential = AzureKeyCredential(search_key) if search_key else credential
-    
+
     app = web.Application()
 
     rtmt = RTMiddleTier(
@@ -47,52 +60,42 @@ async def create_app():
         deployment=llm_deployment,
         voice_choice=os.environ.get("AZURE_OPENAI_REALTIME_VOICE_CHOICE") or "alloy"
     )
+    if api_version := os.environ.get("AZURE_OPENAI_REALTIME_API_VERSION"):
+        rtmt.api_version = api_version
     rtmt.temperature = 0.6
     rtmt.system_message = (
-        "You are a virtual barista assistant for a café, dedicated to providing an exceptional customer experience. "
-        "Your role is to assist customers in ordering beverages from the café menu and managing their orders with accuracy, clarity, and friendliness. "
-        "Always prioritize grounding your responses in the café menu using the 'search' tool, ensuring every interaction is informative and aligned with the menu offerings. "
-        "Maintain a warm, professional tone in every interaction, ensuring customers feel valued and understood. "
-        "When a customer speaks to you in a specific language, such as Spanish, you must respond in that same language. "
-        "If the customer switches to a different language during the conversation, you must also switch to that new language for your responses. "
-
-        "Important Guidelines: "
-        "1. Always use the 'search' tool to check the café menu for accurate information before responding to any question. "
-        "2. Use the 'update_order' tool to add items to the customer's order, specifying the item name, size, quantity, and price, only after the customer has requested and confirmed the item. "
-        "3. Use the 'update_order' tool to remove items from the customer's order, specifying the item name, size, and quantity, only when the customer explicitly requests it. "
-        "4. Use the 'get_order' tool to provide a concise summary of the customer's current order when requested. Always call this tool when the customer indicates they are ready to finish the order, and ensure to communicate the total price of the order clearly. "
-        "5. Provide answers that are as short as possible while still being friendly and complete. Aim for single-sentence responses unless further clarification is requested. "
-        "6. If the required information is not available in the menu, respond with, 'I'm sorry, I don't have that information right now.' "
-
-        "Additional Considerations: "
-        "1. The user is listening to your responses with audio, so ensure your answers are clear, engaging, and easy to understand. "
-        "2. Never read file names, source names, or keys out loud to the customer. "
-        "3. Always respect the customer's preferences and maintain a courteous and professional demeanor. "
-        "4. Where appropriate, ask the customer if they would like to add whipped cream ($0.50), a flavor shot ($0.75), or an extra shot of espresso ($1.00) as separate items to their order. Ensure these are added as individual line items with their respective costs in the itemized order. "
+        "You are Dunkin's always-on virtual crew member, proudly representing Inspire Brands. "
+        "Guide guests through Dunkin menu decisions, keep the tone energetic yet concise, and double-check every detail with the 'search' tool before responding. "
+        "Confirm each requested beverage, bakery item, or breakfast sandwich using the 'update_order' tool only after the guest has agreed. "
+        "When they ask for a recap or when the order is wrapping up, call the 'get_order' tool and read back the totals, including tax. "
+        "Match the customer's language throughout the session, keep responses to one or two sentences, and invite them to personalize drinks with whipped cream ($0.50), flavor swirls ($0.75), or an extra espresso shot ($1.00) only when a signature latte or cold beverage is already in the order. "
+        "Do not suggest extras for donuts or breakfast sandwiches, and never ask to pair an extra espresso shot with a donut or breakfast sandwich. "
+        "If the guest uses hate speech or asks for anything blocked by responsible AI, respond immediately: 'I'm sorry, but I can't assist with that request. If you need help with Dunkin' menu items or have any other questions, please let me know.' "
+        "Always reiterate the order total due when wrapping up and close with 'Have a great day!'. "
+        "If menu information is unavailable, let them know politely and offer an alternative suggestion. "
+        "Never expose implementation details, file names, or API keys. Keep things friendly, fast, and unmistakably Dunkin."
     )
 
-    attach_tools_rtmt(rtmt,
+    attach_tools_rtmt(
+        rtmt,
         credentials=search_credential,
         search_endpoint=os.environ.get("AZURE_SEARCH_ENDPOINT"),
         search_index=os.environ.get("AZURE_SEARCH_INDEX"),
-        semantic_configuration=os.environ.get("AZURE_SEARCH_SEMANTIC_CONFIGURATION") or "default",
-        identifier_field=os.environ.get("AZURE_SEARCH_IDENTIFIER_FIELD") or "chunk_id",
-        content_field=os.environ.get("AZURE_SEARCH_CONTENT_FIELD") or "chunk",
-        embedding_field=os.environ.get("AZURE_SEARCH_EMBEDDING_FIELD") or "text_vector",
-        title_field=os.environ.get("AZURE_SEARCH_TITLE_FIELD") or "title",
-        use_vector_query=(os.environ.get("AZURE_SEARCH_USE_VECTOR_QUERY") == "true") or True
+        # Defaults aligned with the menu ingestion index schema; override via env vars as needed.
+        semantic_configuration=os.environ.get("AZURE_SEARCH_SEMANTIC_CONFIGURATION") or "menuSemanticConfig",
+        identifier_field=os.environ.get("AZURE_SEARCH_IDENTIFIER_FIELD") or "id",
+        content_field=os.environ.get("AZURE_SEARCH_CONTENT_FIELD") or "description",
+        embedding_field=os.environ.get("AZURE_SEARCH_EMBEDDING_FIELD") or "embedding",
+        title_field=os.environ.get("AZURE_SEARCH_TITLE_FIELD") or "name",
+        use_vector_query=_get_bool_env("AZURE_SEARCH_USE_VECTOR_QUERY", True)
     )
 
     rtmt.attach_to_app(app, "/realtime")
 
-    # azurespeech = AzureSpeech(system_message=rtmt.system_message)
-    # azurespeech.attach_to_app(app, "/azurespeech")
-
     current_directory = Path(__file__).parent
     app.add_routes([web.get('/', lambda _: web.FileResponse(current_directory / 'static/index.html'))])
     app.router.add_static('/', path=current_directory / 'static', name='static')
-    # app.router.add_static('/images', path=current_directory / 'images', name='images')  # Commented out
-    
+
     return app
 
 if __name__ == "__main__":

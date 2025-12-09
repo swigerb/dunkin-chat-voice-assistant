@@ -9,7 +9,9 @@ import {
     ResponseDone,
     SessionUpdateCommand,
     ExtensionMiddleTierToolResponse,
-    ResponseInputAudioTranscriptionCompleted
+    ResponseInputAudioTranscriptionCompleted,
+    ExtensionSessionMetadata,
+    ExtensionRoundTripToken
 } from "@/types";
 
 type Parameters = {
@@ -28,6 +30,8 @@ type Parameters = {
     onReceivedInputAudioBufferSpeechStarted?: (message: Message) => void;
     onReceivedResponseDone?: (message: ResponseDone) => void;
     onReceivedExtensionMiddleTierToolResponse?: (message: ExtensionMiddleTierToolResponse) => void;
+    onReceivedSessionMetadata?: (message: ExtensionSessionMetadata) => void;
+    onReceivedRoundTripToken?: (message: ExtensionRoundTripToken) => void;
     onReceivedResponseAudioTranscriptDelta?: (message: ResponseAudioTranscriptDelta) => void;
     onReceivedInputAudioTranscriptionCompleted?: (message: ResponseInputAudioTranscriptionCompleted) => void;
     onReceivedError?: (message: Message) => void;
@@ -49,6 +53,8 @@ export default function useRealTime({
     onReceivedInputAudioBufferSpeechStarted,
     onReceivedExtensionMiddleTierToolResponse,
     onReceivedInputAudioTranscriptionCompleted,
+    onReceivedSessionMetadata,
+    onReceivedRoundTripToken,
     onReceivedError
 }: Parameters) {
     const wsEndpoint = useDirectAoaiApi
@@ -131,6 +137,12 @@ export default function useRealTime({
                 break;
             case "extension.middle_tier_tool_response":
                 onReceivedExtensionMiddleTierToolResponse?.(message as ExtensionMiddleTierToolResponse);
+                break;
+            case "extension.session_metadata":
+                onReceivedSessionMetadata?.(message as ExtensionSessionMetadata);
+                break;
+            case "extension.round_trip_token":
+                onReceivedRoundTripToken?.(message as ExtensionRoundTripToken);
                 break;
             case "error":
                 onReceivedError?.(message);

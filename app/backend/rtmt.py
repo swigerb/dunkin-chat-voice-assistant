@@ -9,7 +9,7 @@ from aiohttp import web
 from azure.core.credentials import AzureKeyCredential
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
-from order_state import order_state_singleton  # Import the order state singleton
+from order_state import order_state_singleton, SessionIdentifiers  # Import the order state singleton
 
 logger = logging.getLogger("coffee-chat")
 
@@ -67,6 +67,7 @@ class RTMiddleTier:
     _tools_pending = {}
     _token_provider = None
     _session_map = {}
+    _sent_greeting = set()
 
     def __init__(self, endpoint: str, deployment: str, credentials: AzureKeyCredential | DefaultAzureCredential, voice_choice: Optional[str] = None):
         self.endpoint = endpoint
@@ -80,10 +81,27 @@ class RTMiddleTier:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
 
+    async def _emit_session_identifiers(
+        self,
+        client_ws: web.WebSocketResponse,
+        event_type: str,
+        identifiers: SessionIdentifiers | None,
+    ) -> None:
+        if identifiers is None:
+            return
+        await client_ws.send_json(
+            {
+                "type": event_type,
+                "sessionToken": identifiers.session_token,
+                "roundTripIndex": identifiers.round_trip_index,
+                "roundTripToken": identifiers.round_trip_token,
+            }
+        )
+
     async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse) -> Optional[str]:
         message = json.loads(msg.data)
         updated_message = msg.data
-        session_id = self._session_map[client_ws]
+        session_id = self._session_map.get(client_ws)
         if message is not None:
             match message["type"]:
                 case "session.created":
@@ -96,6 +114,9 @@ class RTMiddleTier:
                     session["tool_choice"] = "none"
                     session["max_response_output_tokens"] = None
                     updated_message = json.dumps(message)
+                    if session_id is not None:
+                        identifiers = order_state_singleton.get_session_identifiers(session_id)
+                        await self._emit_session_identifiers(client_ws, "extension.session_metadata", identifiers)
 
                 case "response.output_item.added":
                     if "item" in message and message["item"]["type"] == "function_call":
@@ -162,6 +183,9 @@ class RTMiddleTier:
                             logging.error(f"Error processing message: {e}")
                         if replace:
                             updated_message = json.dumps(message)
+                    if session_id is not None:
+                        identifiers = order_state_singleton.advance_round_trip(session_id)
+                        await self._emit_session_identifiers(client_ws, "extension.round_trip_token", identifiers)
 
         return updated_message
 
@@ -199,9 +223,32 @@ class RTMiddleTier:
             else:
                 headers = { "Authorization": f"Bearer {self._token_provider()}" } # NOTE: no async version of token provider, maybe refresh token on a timer?
             async with session.ws_connect("/openai/realtime", headers=headers, params=params) as target_ws:
+                session_id = self._session_map.get(ws)
+                greeting_sent = session_id in self._sent_greeting
+
+                async def send_greeting_once():
+                    nonlocal greeting_sent
+                    if greeting_sent:
+                        return
+                    await target_ws.send_json({
+                        "type": "conversation.item.create",
+                        "item": {
+                            "type": "message",
+                            "role": "user",
+                            "content": [
+                                {"type": "input_text", "text": "Please greet the guest with: 'Welcome to Dunkin! How may I help you today?'"}
+                            ]
+                        }
+                    })
+                    await target_ws.send_json({"type": "response.create"})
+                    greeting_sent = True
+                    if session_id is not None:
+                        self._sent_greeting.add(session_id)
                 async def from_client_to_server():
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
+                            if not greeting_sent:
+                                await send_greeting_once()
                             new_msg = await self._process_message_to_server(msg, ws)
                             if new_msg is not None:
                                 await target_ws.send_str(new_msg)

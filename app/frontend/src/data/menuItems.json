@@ -1,210 +1,192 @@
 {
     "menuItems": [
         {
-            "category": "Coffee",
+            "category": "Signature Lattes",
             "items": [
                 {
-                    "name": "Espresso",
+                    "name": "Caramel Craze Latte",
                     "sizes": [
-                        { "size": "single", "price": 1.0 },
-                        { "size": "double", "price": 2.0 }
+                        { "size": "small", "price": 4.49 },
+                        { "size": "medium", "price": 4.99 },
+                        { "size": "large", "price": 5.49 }
                     ],
-                    "description": "Rich and bold single or double shot",
-                    "longDescription": "Espresso is the quintessential coffee experience, brewed under pressure to extract its bold, rich flavor. A favorite in Italy and around the world, it forms the base for many coffee drinks, including cappuccinos and lattes. Perfect for those who enjoy an intense coffee kick with a creamy layer of crema.",
-                    "origin": "Italy",
-                    "caffeineContent": "63 mg per shot",
-                    "brewingMethod": "Espresso Machine",
-                    "popularity": "High",
-                    "image": "menu_images/espresso_image"
+                    "description": "Espresso with caramel drizzle and whipped cream",
+                    "longDescription": "A Dunkin signature latte layered with bold espresso, caramel-flavored swirl, and steamed milk, topped with whipped cream and caramel drizzle for an indulgent finish.",
+                    "origin": "Dunkin U.S. Menu",
+                    "caffeineContent": "166 mg (medium)",
+                    "brewingMethod": "Espresso machine",
+                    "popularity": "Guest Favorite",
+                    "image": "menu_images/caramel_craze"
                 },
                 {
-                    "name": "Americano",
+                    "name": "Cocoa Mocha Latte",
                     "sizes": [
-                        { "size": "small", "price": 2.5 },
-                        { "size": "medium", "price": 4.0 },
-                        { "size": "large", "price": 5.0 }
+                        { "size": "small", "price": 4.59 },
+                        { "size": "medium", "price": 5.09 },
+                        { "size": "large", "price": 5.59 }
                     ],
-                    "description": "Espresso with hot water",
-                    "longDescription": "The Americano is a smooth, diluted espresso drink inspired by American GIs in Italy during WWII who added water to espresso to mimic drip coffee. It retains the rich essence of espresso while offering a milder flavor profile, perfect for those who prefer a less intense coffee experience.",
-                    "origin": "United States",
-                    "caffeineContent": "95 mg for medium",
-                    "brewingMethod": "Espresso Machine with water dilution",
-                    "popularity": "Moderate",
-                    "image": "menu_images/americano_image"
+                    "description": "Chocolate-forward espresso drink finished with mocha drizzle",
+                    "longDescription": "Balanced espresso, mocha swirl, and steamed milk create a smooth chocolate latte crowned with whipped cream and cocoa powder for an elevated Dunkin moment.",
+                    "origin": "Inspire Brands Innovation Lab",
+                    "caffeineContent": "170 mg (medium)",
+                    "brewingMethod": "Espresso machine",
+                    "popularity": "Seasonal Spotlight",
+                    "image": "menu_images/cocoa_mocha"
                 },
                 {
-                    "name": "Cappuccino",
+                    "name": "Toasted Almond Cold Foam Latte",
                     "sizes": [
-                        { "size": "small", "price": 3.5 },
-                        { "size": "medium", "price": 4.5 },
-                        { "size": "large", "price": 5.5 }
+                        { "size": "small", "price": 4.79 },
+                        { "size": "medium", "price": 5.29 },
+                        { "size": "large", "price": 5.79 }
                     ],
-                    "description": "Espresso with steamed milk and foam",
-                    "longDescription": "Cappuccino combines the boldness of espresso with a luxurious layer of steamed milk and a light, frothy foam topping. Originating in Italy, it's a classic choice for those who enjoy a balanced, creamy texture with every sip.",
-                    "origin": "Italy",
-                    "caffeineContent": "75 mg for medium",
-                    "brewingMethod": "Espresso Machine with milk frothing",
-                    "popularity": "High",
-                    "image": "menu_images/cappuccino_image"
-                },
-                {
-                    "name": "Latte",
-                    "sizes": [
-                        { "size": "small", "price": 3.5 },
-                        { "size": "medium", "price": 4.5 },
-                        { "size": "large", "price": 5.5 }
-                    ],
-                    "description": "Espresso with steamed milk",
-                    "longDescription": "The Latte, meaning 'milk' in Italian, is a creamy coffee beverage made with espresso and a generous amount of steamed milk, topped with a thin layer of foam. It's perfect for those who prefer a milder coffee taste and pairs well with flavored syrups.",
-                    "origin": "Italy",
-                    "caffeineContent": "75 mg for medium",
-                    "brewingMethod": "Espresso Machine with milk steaming",
-                    "popularity": "Very High",
-                    "image": "menu_images/latte_image"
-                },
-                {
-                    "name": "Mocha",
-                    "sizes": [
-                        { "size": "small", "price": 4.0 },
-                        { "size": "medium", "price": 5.0 },
-                        { "size": "large", "price": 6.0 }
-                    ],
-                    "description": "Espresso with chocolate and steamed milk",
-                    "longDescription": "The Mocha is a delightful blend of espresso, steamed milk, and rich chocolate syrup, often topped with whipped cream. Originating from Yemen, it offers a sweet and indulgent coffee experience that's perfect for chocolate lovers.",
-                    "origin": "Yemen",
-                    "caffeineContent": "80 mg for medium",
-                    "brewingMethod": "Espresso Machine with chocolate mix",
-                    "popularity": "High",
-                    "image": "menu_images/mocha_image"
-                },
-                {
-                    "name": "Coffee Infusion",
-                    "sizes": [{ "size": "kannchen", "price": 6.0 }],
-                    "description": "French Press infused at your table (about 3 cups; please wait 2 minutes to push the press).",
-                    "longDescription": "Our Coffee Infusion is a table-side experience using the French Press method. This technique allows coffee grounds to steep in hot water, enhancing their natural flavors and oils for a rich, full-bodied brew. Ideal for sharing or savoring solo.",
-                    "origin": "France",
-                    "caffeineContent": "120 mg per serving",
-                    "brewingMethod": "French Press",
-                    "popularity": "Unique",
-                    "image": "menu_images/coffee_infusion_image"
-                },
-                {
-                    "name": "Turkish Coffee",
-                    "sizes": [{ "size": "pot", "price": 4.5 }],
-                    "description": "Pulverized light roast beans blended with cardamom and sugar, boiled 3 times, as served traditionally.",
-                    "longDescription": "Turkish Coffee is a traditional preparation involving finely ground coffee beans, cardamom, and sugar boiled together. It's a rich, aromatic brew served in small cups with grounds settled at the bottom. Perfect for savoring slowly.",
-                    "origin": "Turkey",
-                    "caffeineContent": "50 mg per small cup",
-                    "brewingMethod": "Boiled",
-                    "popularity": "Traditional",
-                    "image": "menu_images/turkish_coffee_image"
-                },
-                {
-                    "name": "Café Cubano",
-                    "sizes": [
-                        { "size": "single", "price": 2.5 },
-                        { "size": "double", "price": 4.0 }
-                    ],
-                    "description": "Double-rich espresso extraction with caramelized sugar.",
-                    "longDescription": "Café Cubano is a Cuban specialty featuring espresso sweetened with sugar during the brewing process, creating a thick, syrupy coffee shot. It's a perfect blend of boldness and sweetness for an energizing treat.",
-                    "origin": "Cuba",
-                    "caffeineContent": "63 mg per shot",
-                    "brewingMethod": "Espresso Machine",
-                    "popularity": "High",
-                    "image": "menu_images/cafe_cubano_image"
+                    "description": "Iced latte with toasted almond swirl and cold foam cap",
+                    "longDescription": "Chilled espresso poured over ice with toasted almond flavor, finished with vanilla cold foam for layered texture and sweetness.",
+                    "origin": "Dunkin Next-Gen Restaurant",
+                    "caffeineContent": "187 mg (medium)",
+                    "brewingMethod": "Espresso over ice",
+                    "popularity": "Emerging Favorite",
+                    "image": "menu_images/toasted_almond"
                 }
             ]
         },
         {
-            "category": "Chilled Coffees",
+            "category": "Cold Beverages",
             "items": [
                 {
-                    "name": "Café Johannes",
+                    "name": "Original Cold Brew",
                     "sizes": [
-                        { "size": "single", "price": 5.0 },
-                        { "size": "double", "price": 6.5 }
+                        { "size": "small", "price": 3.79 },
+                        { "size": "medium", "price": 4.29 },
+                        { "size": "large", "price": 4.79 }
                     ],
-                    "description": "Espresso doppio over two scoops of vanilla ice cream, with whipped cream",
-                    "longDescription": "Café Johannes combines the boldness of double espresso with the creaminess of vanilla ice cream and whipped cream. It's a dessert-like coffee treat that's both refreshing and indulgent.",
-                    "origin": "Italy",
-                    "caffeineContent": "75 mg per serving",
-                    "brewingMethod": "Espresso Machine",
+                    "description": "12-hour steeped cold brew over ice",
+                    "longDescription": "Smooth, full-bodied cold brew handcrafted daily and served over ice. Add cold foam or a flavor swirl for a personalized sip.",
+                    "origin": "Dunkin Breweries",
+                    "caffeineContent": "260 mg (medium)",
+                    "brewingMethod": "Cold steep",
                     "popularity": "High",
-                    "image": "menu_images/cafe_johannes_image"
+                    "image": "menu_images/cold_brew"
                 },
                 {
-                    "name": "Granita Cappuccino",
+                    "name": "Strawberry Dragonfruit Refresher",
                     "sizes": [
-                        { "size": "small", "price": 4.5 },
-                        { "size": "medium", "price": 5.5 },
-                        { "size": "large", "price": 6.5 }
+                        { "size": "small", "price": 3.29 },
+                        { "size": "medium", "price": 3.79 },
+                        { "size": "large", "price": 4.29 }
                     ],
-                    "description": "Granules of sugar and ice mixed with espresso, cream, cocoa, and whipped cream",
-                    "longDescription": "The Granita Cappuccino is a frozen coffee blend featuring espresso, cream, cocoa, and sugar. It's topped with whipped cream for a refreshing, sweet treat on hot days.",
-                    "origin": "Custom House Recipe",
-                    "caffeineContent": "80 mg for medium",
-                    "brewingMethod": "Blended",
-                    "popularity": "Refreshing",
-                    "image": "menu_images/granita_cappuccino_image"
+                    "description": "Green tea-based refresher with B vitamins",
+                    "longDescription": "Vibrant strawberry dragonfruit flavor balanced with green tea and B vitamins for a light, energizing beverage without dairy.",
+                    "origin": "Dunkin Beverage Innovation",
+                    "caffeineContent": "99 mg (medium)",
+                    "brewingMethod": "Green tea infusion",
+                    "popularity": "Always On Menu",
+                    "image": "menu_images/dragonfruit_refresher"
                 },
                 {
-                    "name": "Caffé Alpine",
+                    "name": "Brown Sugar Cream Cold Brew",
                     "sizes": [
-                        { "size": "small", "price": 4.0 },
-                        { "size": "medium", "price": 5.0 },
-                        { "size": "large", "price": 6.0 }
+                        { "size": "small", "price": 4.29 },
+                        { "size": "medium", "price": 4.79 },
+                        { "size": "large", "price": 5.29 }
                     ],
-                    "description": "Espresso, white chocolate, and cream, served over ice",
-                    "longDescription": "Caffé Alpine offers a smooth combination of espresso, white chocolate, and cream served over ice. It's a creamy and cooling coffee option perfect for those who enjoy sweet iced drinks.",
-                    "origin": "Custom House Recipe",
-                    "caffeineContent": "70 mg for medium",
-                    "brewingMethod": "Espresso Machine with ice",
-                    "popularity": "Moderate",
-                    "image": "menu_images/caffe_alpine_image"
+                    "description": "Cold brew with brown sugar syrup and cinnamon-sugar cold foam",
+                    "longDescription": "Slow-steeped cold brew sweetened with brown sugar syrup, topped with cinnamon-sugar dusted cold foam for a layered finish.",
+                    "origin": "Inspire Brands Test Kitchen",
+                    "caffeineContent": "267 mg (medium)",
+                    "brewingMethod": "Cold steep",
+                    "popularity": "Limited Time Feature",
+                    "image": "menu_images/brown_sugar_coldbrew"
                 }
             ]
         },
         {
-            "category": "Hot Chocolates",
+            "category": "Donuts & Bakery",
             "items": [
                 {
-                    "name": "Hot Chocolate Deluxe",
+                    "name": "Glazed Donut",
                     "sizes": [
-                        { "size": "small", "price": 3.0 },
-                        { "size": "medium", "price": 4.0 },
-                        { "size": "large", "price": 5.0 }
+                        { "size": "standard", "price": 1.49 }
                     ],
-                    "description": "Rich steamed cream and milk, Dutch chocolate, fresh whipped cream, and shaved dark chocolate",
-                    "longDescription": "Hot Chocolate Deluxe is a decadent beverage featuring rich Dutch chocolate steamed with cream and milk. Topped with fresh whipped cream and shaved dark chocolate, it's a comforting indulgence.",
-                    "origin": "Custom House Recipe",
-                    "popularity": "Very High",
-                    "image": "menu_images/hot_chocolate_deluxe_image"
+                    "description": "Classic yeast donut coated in vanilla glaze",
+                    "longDescription": "Soft, airy donut finished with a signature sweet glaze. Pair it with hot coffee for the quintessential Dunkin duo.",
+                    "origin": "Dunkin Bakery",
+                    "popularity": "Iconic",
+                    "image": "menu_images/glazed_donut"
                 },
                 {
-                    "name": "Intermezzo Hot Chocolate",
+                    "name": "Boston Kreme Donut",
                     "sizes": [
-                        { "size": "small", "price": 3.5 },
-                        { "size": "medium", "price": 4.5 },
-                        { "size": "large", "price": 5.5 }
+                        { "size": "standard", "price": 1.79 }
                     ],
-                    "description": "Rich steamed cream, Dutch chocolate, fresh whipped cream, and the essence of almond",
-                    "longDescription": "The Intermezzo Hot Chocolate adds a nutty twist to the classic hot chocolate with the essence of almond. Perfect for those who love a bit of sophistication in their chocolate beverages.",
-                    "origin": "Custom House Recipe",
-                    "popularity": "High",
-                    "image": "menu_images/intermezzo_hot_chocolate_image"
+                    "description": "Custard-filled donut topped with chocolate icing",
+                    "longDescription": "A nod to Dunkin's New England roots featuring silky Bavarian cream and rich chocolate icing.",
+                    "origin": "Boston, MA",
+                    "popularity": "Regional Favorite",
+                    "image": "menu_images/boston_kreme"
                 },
                 {
-                    "name": "Mexican Hot Chocolate",
+                    "name": "Everything Bagel & Cream Cheese",
                     "sizes": [
-                        { "size": "small", "price": 3.5 },
-                        { "size": "medium", "price": 4.5 },
-                        { "size": "large", "price": 5.5 }
+                        { "size": "standard", "price": 3.29 }
                     ],
-                    "description": "Semi-sweet dark chocolate, Mexican vanilla, milk, and cinnamon",
-                    "longDescription": "Mexican Hot Chocolate blends semi-sweet dark chocolate with Mexican vanilla and cinnamon, creating a warm, spiced drink that's perfect for cozy evenings.",
-                    "origin": "Mexico",
-                    "popularity": "Cultural Favorite",
-                    "image": "menu_images/mexican_hot_chocolate_image"
+                    "description": "Toasted everything bagel with plain cream cheese",
+                    "longDescription": "Freshly toasted bagel coated with sesame, poppy seeds, garlic, and onion, served with cool cream cheese spread.",
+                    "origin": "Dunkin Bakery",
+                    "popularity": "Morning Rush MVP",
+                    "image": "menu_images/everything_bagel"
+                },
+                {
+                    "name": "MUNCHKINS® Donut Hole Treats (10 ct)",
+                    "sizes": [
+                        { "size": "standard", "price": 3.99 }
+                    ],
+                    "description": "Assorted bite-sized donuts",
+                    "longDescription": "Shareable assortment of glazed, chocolate, and jelly MUNCHKINS donut holes—perfect for offices and carpool lines.",
+                    "origin": "Dunkin Bakery",
+                    "popularity": "Group Favorite",
+                    "image": "menu_images/munchkins"
+                }
+            ]
+        },
+        {
+            "category": "Breakfast Sandwiches",
+            "items": [
+                {
+                    "name": "Bacon Egg & Cheese on Croissant",
+                    "sizes": [
+                        { "size": "standard", "price": 4.99 }
+                    ],
+                    "description": "Cherrywood smoked bacon, eggs, and American cheese",
+                    "longDescription": "A flaky croissant stacked with cherrywood smoked bacon, fluffy eggs, and melty cheese to fuel busy mornings.",
+                    "origin": "Dunkin Kitchens",
+                    "calories": "550 cal",
+                    "popularity": "Top Seller",
+                    "image": "menu_images/bacon_croissant"
+                },
+                {
+                    "name": "Power Breakfast Sandwich",
+                    "sizes": [
+                        { "size": "standard", "price": 5.49 }
+                    ],
+                    "description": "Multi-grain bread with turkey sausage and egg whites",
+                    "longDescription": "Better-for-you build with veggie egg white omelet, turkey sausage, and aged white cheddar on seeded multigrain bread.",
+                    "origin": "Inspire Brands Nutrition Lab",
+                    "calories": "370 cal",
+                    "popularity": "Balanced Choice",
+                    "image": "menu_images/power_breakfast"
+                },
+                {
+                    "name": "Turkey Sausage Wake-Up Wrap",
+                    "sizes": [
+                        { "size": "standard", "price": 2.59 }
+                    ],
+                    "description": "Egg and turkey sausage in a warm tortilla",
+                    "longDescription": "Portable protein with scrambled egg, turkey sausage, and American cheese inside a grilled tortilla.",
+                    "origin": "Dunkin Anytime Menu",
+                    "calories": "240 cal",
+                    "popularity": "Value Leader",
+                    "image": "menu_images/turkey_wrap"
                 }
             ]
         },
@@ -212,31 +194,35 @@
             "category": "Extras",
             "items": [
                 {
-                    "name": "Extra Shot",
-                    "sizes": [{ "size": "standard", "price": 1.0 }],
-                    "description": "Add an extra shot of espresso",
-                    "longDescription": "Boost your beverage with an extra shot of espresso, adding richness and a caffeine kick to your favorite drink.",
-                    "caffeineContent": "63 mg",
+                    "name": "Flavor Swirl Add-On",
+                    "sizes": [
+                        { "size": "standard", "price": 0.75 }
+                    ],
+                    "description": "Caramel, mocha, French vanilla, or seasonal swirl",
+                    "longDescription": "Rich, creamy swirls that add sweetness and color to any hot or iced beverage.",
                     "availability": "Always",
-                    "image": "menu_images/extra_shot_image"
-                },
-                {
-                    "name": "Flavor Shot",
-                    "sizes": [{ "size": "standard", "price": 0.75 }],
-                    "description": "Add vanilla, caramel, or hazelnut",
-                    "longDescription": "Customize your coffee with a flavor shot. Choose from vanilla, caramel, or hazelnut to enhance the taste of your drink.",
-                    "options": ["Vanilla", "Caramel", "Hazelnut"],
-                    "availability": "Always",
-                    "image": "menu_images/flavor_shot_image"
+                    "image": "menu_images/flavor_swirl"
                 },
                 {
                     "name": "Whipped Cream",
-                    "sizes": [{ "size": "standard", "price": 0.5 }],
+                    "sizes": [
+                        { "size": "standard", "price": 0.5 }
+                    ],
                     "description": "Add whipped cream topping",
-                    "longDescription": "Top your coffee or hot chocolate with our fresh whipped cream, made from heavy cream, sugar, and a hint of vanilla for added indulgence.",
-                    "ingredients": ["Heavy Cream", "Sugar", "Vanilla"],
+                    "longDescription": "Finish drinks with house-made whipped cream for extra texture and presentation.",
                     "availability": "Always",
-                    "image": "menu_images/whipped_cream_image"
+                    "image": "menu_images/whipped_cream"
+                },
+                {
+                    "name": "Extra Espresso Shot",
+                    "sizes": [
+                        { "size": "standard", "price": 1.0 }
+                    ],
+                    "description": "Add one additional espresso shot",
+                    "longDescription": "Boost any beverage with a fresh-pulled Dunkin espresso shot for added intensity.",
+                    "caffeineContent": "75 mg per shot",
+                    "availability": "Always",
+                    "image": "menu_images/extra_shot"
                 }
             ]
         }

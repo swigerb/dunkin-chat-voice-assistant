@@ -41,5 +41,16 @@ export default defineConfig({
                 rewriteWsOrigin: true
             }
         }
+    },
+    test: {
+        globals: true,
+        environment: "jsdom",
+        setupFiles: "./src/test/setup.ts",
+        css: true,
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "lcov"],
+            include: ["src/components/ui/order-summary.tsx", "src/components/ui/status-message.tsx"]
+        }
     }
 });
