@@ -20,8 +20,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # Force azd install to pull from GitHub releases instead of the azureedge CDN to avoid DNS failures
-      AZD_CLI_SOURCE: github
       # azd required
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -62,12 +60,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install azd from GitHub releases (avoid azureedge CDN)
-        run: |
-          curl -fsSL https://aka.ms/install-azd.sh -o install-azd.sh
-          chmod +x install-azd.sh
-          ./install-azd.sh --base-url https://github.com/Azure/azure-dev/releases/download
-          azd version
+      - name: Install azd
+        uses: Azure/setup-azd@v1.0.0
 
       - name: Install Nodejs
         uses: actions/setup-node@v4
