@@ -62,8 +62,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install azd
-        uses: Azure/setup-azd@v1.0.0
+      - name: Install azd from GitHub releases (avoid azureedge CDN)
+        run: |
+          curl -fsSL https://aka.ms/install-azd.sh -o install-azd.sh
+          chmod +x install-azd.sh
+          ./install-azd.sh --base-url https://github.com/Azure/azure-dev/releases/download
+          azd version
 
       - name: Install Nodejs
         uses: actions/setup-node@v4
