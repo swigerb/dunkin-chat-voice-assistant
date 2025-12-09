@@ -20,6 +20,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
+      # Force azd install to pull from GitHub releases instead of the azureedge CDN to avoid DNS failures
+      AZD_CLI_SOURCE: github
       # azd required
       AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
