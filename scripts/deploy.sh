@@ -84,8 +84,7 @@ fi
 echo "Checking for frontend environment variables..."
 if [ -f "$FRONTEND_ENV_FILE_PATH" ]; then
   echo "✅ Frontend .env file found at $FRONTEND_ENV_FILE_PATH"
-  echo "Contents:"
-  cat "$FRONTEND_ENV_FILE_PATH"
+    echo "(Not printing contents.)"
 else
     echo "⚠️ Frontend .env file not found at $FRONTEND_ENV_FILE_PATH, creating one..."
     
@@ -104,10 +103,9 @@ else
     fi
 fi
 
-# Export frontend environment variables for build args
+# Frontend build reads Vite env vars from the frontend .env file during docker build.
 if [ -f "$FRONTEND_ENV_FILE_PATH" ]; then
-  export $(grep -v '^#' "$FRONTEND_ENV_FILE_PATH" | xargs)
-  echo "Frontend environment variables loaded."
+    echo "Frontend Vite environment file ready at $FRONTEND_ENV_FILE_PATH"
 fi
 
 # Rest of the script remains unchanged
@@ -237,7 +235,7 @@ fi
 echo "Logging in to Azure Container Registry: $ACR_NAME"
 az acr login --name $ACR_NAME
 
-# MODIFIED: Build the Docker image with frontend environment variables
+# Build the Docker image (Vite env comes from app/frontend/.env during the build)
 # Use --no-cache flag to ensure a complete rebuild
 echo "Building Docker image (with no cache): $ACR_NAME.azurecr.io/$IMAGE_NAME:$DOCKER_IMAGE_TAG"
 # Add timestamp to tag for uniqueness
@@ -249,8 +247,6 @@ echo "Using unique image tag: $UNIQUE_IMAGE_TAG"
 docker build --no-cache --platform linux/amd64 \
   -f $DOCKERFILE_PATH \
   --build-arg ENTRY_FILE=$ENTRY_FILE \
-  --build-arg VITE_AUTH_URL="$VITE_AUTH_URL" \
-  --build-arg VITE_AUTH_ENABLED="$VITE_AUTH_ENABLED" \
   -t $ACR_NAME.azurecr.io/$IMAGE_NAME:$DOCKER_IMAGE_TAG \
   -t $ACR_NAME.azurecr.io/$IMAGE_NAME:$UNIQUE_IMAGE_TAG \
   $DOCKER_CONTEXT

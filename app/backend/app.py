@@ -14,8 +14,6 @@ from rtmt import RTMiddleTier
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-
 
 def _get_bool_env(variable_name: str, default: bool = False) -> bool:
     """Parse boolean environment variables with predictable defaults."""
@@ -28,8 +26,8 @@ def _get_bool_env(variable_name: str, default: bool = False) -> bool:
 async def create_app():
     """Configure and return the aiohttp application for realtime ordering."""
 
-    if not os.environ.get("RUNNING_IN_PRODUCTION"):
-        logger.info("Running in development mode; refreshing values from .env")
+    if not _get_bool_env("RUNNING_IN_PRODUCTION", False):
+        logger.info("Running in development mode; loading values from .env")
         load_dotenv()
 
     llm_endpoint = os.environ.get("AZURE_OPENAI_EASTUS2_ENDPOINT")

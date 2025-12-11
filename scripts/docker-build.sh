@@ -3,14 +3,13 @@
 # Ensure frontend .env file exists before building Docker image
 if [ -f "./app/frontend/.env" ]; then
   echo "✅ Frontend .env file found"
-  echo "Contents:"
-  cat "./app/frontend/.env"
+    echo "(Not printing contents.)"
 else
     echo "⚠️ Frontend .env file not found, creating from sample or backend..."
     
     # Try to copy from backend env variables related to auth
     if [ -f "./app/backend/.env" ]; then
-        echo "Creating frontend .env from backend variables"
+        echo "Creating frontend .env from backend VITE_* variables"
         grep "VITE_" ./app/backend/.env > ./app/frontend/.env 2>/dev/null || echo "" > ./app/frontend/.env
         
         # If no VITE_ variables found, add the defaults
@@ -29,13 +28,9 @@ else
     fi
 fi
 
-# Build the Docker image with build arguments from .env
+# Build the Docker image (frontend config is read from app/frontend/.env)
 echo "🔨 Building Docker image..."
-export $(grep -v '^#' ./app/frontend/.env | xargs)
-docker build  --no-cache -t coffee-chat-app \
-  --build-arg VITE_AUTH_URL="$VITE_AUTH_URL" \
-  --build-arg VITE_AUTH_ENABLED="$VITE_AUTH_ENABLED" \
-  -f ./app/Dockerfile ./app
+docker build --no-cache -t coffee-chat-app -f ./app/Dockerfile ./app
 
 # Run the container
 echo "🚀 Running Docker container..."

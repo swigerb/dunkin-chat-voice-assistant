@@ -46,6 +46,11 @@ class OrderState:
         logger.info(f"Session created with ID {session_id}")
         return session_id
 
+    def delete_session(self, session_id: str) -> None:
+        if session_id in self.sessions:
+            del self.sessions[session_id]
+            logger.info("Session deleted with ID %s", session_id)
+
     def _format_round_trip_token(self, session_token: str, round_trip_index: int) -> str:
         return f"{session_token}-{round_trip_index:04d}"
 

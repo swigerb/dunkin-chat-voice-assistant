@@ -182,19 +182,21 @@ For testing in an isolated container environment:
    ```
 
    This script automatically handles:
-   - Verifying/creating frontend environment variables
-   - Building the Docker image with proper environment settings
-   - Running the container with your backend configuration
+
+    - Verifying/creating frontend environment variables
+    - Building the Docker image using `app/frontend/.env` for Vite settings
+    - Running the container with your backend configuration
 
 3. Navigate to [http://localhost:8000](http://localhost:8000) to use the application.
 
 Alternatively, you can manually build and run the Docker container:
 
 ```bash
+# Ensure frontend Vite settings exist (edit values as needed)
+# cp ./app/frontend/.env-sample ./app/frontend/.env
+
 # Build the Docker image
 docker build -t coffee-chat-app \
-  --build-arg VITE_AUTH_URL="https://your-auth-url.com" \
-  --build-arg VITE_AUTH_ENABLED="true" \
   -f ./app/Dockerfile ./app
 
 # Run the container with your environment variables
@@ -249,6 +251,7 @@ This project is licensed under the [MIT License](LICENSE). You may use, copy, mo
 Contributions are welcome! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup, branching guidance, and the pre-flight test checklist before opening an issue or submitting a pull request.
 
 ## Disclaimer
+
 All trademarks and brand references belong to their respective owners.
 
 The diagrams, images, and code samples in this repository are provided **AS IS** for **proof-of-concept and pilot purposes only** and are **not intended for production use**.

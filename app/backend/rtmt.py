@@ -53,7 +53,7 @@ class RTMiddleTier:
     
     # Tools are server-side only for now, though the case could be made for client-side tools
     # in addition to server-side tools that are invisible to the client
-    tools: dict[str, Tool] = {}
+    tools: dict[str, Tool]
 
     # Server-enforced configuration, if set, these will override the client's configuration
     # Typically at least the model name and system message will be set by the server
@@ -64,15 +64,16 @@ class RTMiddleTier:
     disable_audio: Optional[bool] = None
     voice_choice: Optional[str] = None
     api_version: str = "2024-10-01-preview"
-    _tools_pending = {}
-    _token_provider = None
-    _session_map = {}
-    _sent_greeting = set()
 
     def __init__(self, endpoint: str, deployment: str, credentials: AzureKeyCredential | DefaultAzureCredential, voice_choice: Optional[str] = None):
         self.endpoint = endpoint
         self.deployment = deployment
         self.voice_choice = voice_choice
+        self.tools = {}
+        self._tools_pending: dict[str, RTToolCall] = {}
+        self._token_provider = None
+        self._session_map: dict[web.WebSocketResponse, str] = {}
+        self._sent_greeting: set[str] = set()
         if voice_choice is not None:
             logger.info("Realtime voice choice set to %s", voice_choice)
         if isinstance(credentials, AzureKeyCredential):
@@ -275,6 +276,8 @@ class RTMiddleTier:
                     # Ignore the errors resulting from the client disconnecting the socket
                     pass
                 finally:
+                    if session_id is not None:
+                        order_state_singleton.delete_session(session_id)
                     # Clean up the session map when the connection is closed
                     if ws in self._session_map:
                         del self._session_map[ws]

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,24 @@ BLOCKED_EXTRA_CATEGORIES = {"donuts & bakery", "breakfast sandwiches"}
 
 
 def _load_menu_category_map() -> dict[str, str]:
-    menu_path = Path(__file__).resolve().parent.parent / "frontend" / "src" / "data" / "menuItems.json"
+    env_override = (
+        os.environ.get("DUNKIN_MENU_ITEMS_PATH")
+        or os.environ.get("MENU_ITEMS_PATH")
+    )
+
+    candidate_paths = []
+    if env_override:
+        candidate_paths.append(Path(env_override))
+
+    # Preferred: keep backend self-contained (Docker image can copy this in).
+    candidate_paths.append(Path(__file__).resolve().parent / "data" / "menuItems.json")
+
+    # Fallback: repo layout (local dev).
+    candidate_paths.append(Path(__file__).resolve().parent.parent / "frontend" / "src" / "data" / "menuItems.json")
+
+    menu_path = next((path for path in candidate_paths if path.exists()), None)
+    if menu_path is None:
+        return {}
     try:
         with menu_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -41,7 +59,7 @@ def _load_menu_category_map() -> dict[str, str]:
                     mapping[name.lower()] = category
         return mapping
     except Exception as exc:  # pragma: no cover - defensive fallback
-        logger.warning("Falling back to keyword category inference: %s", exc)
+        logger.warning("Failed to load menu items; falling back to keyword category inference: %s", exc)
         return {}
 
 
