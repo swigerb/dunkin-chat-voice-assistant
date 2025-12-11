@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Mic, MicOff, Menu, MessageSquare, LogOut, Github } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -108,6 +108,11 @@ function CoffeeApp() {
         });
     };
 
+    const isSessionActiveRef = useRef(false);
+    const awaitingGreetingDoneRef = useRef(false);
+    const greetingAudioSeenRef = useRef(false);
+    const startMicInFlightRef = useRef<Promise<void> | null>(null);
+
     const realtime = useRealTime({
         enableInputAudioTranscription: true,
         onWebSocketOpen: () => console.log("WebSocket connection opened"),
@@ -115,7 +120,9 @@ function CoffeeApp() {
         onWebSocketError: event => console.error("WebSocket error:", event),
         onReceivedError: message => console.error("error", message),
         onReceivedResponseAudioDelta: message => {
-            isRecording && playAudio(message.delta);
+            if (!isSessionActiveRef.current) return;
+            greetingAudioSeenRef.current = true;
+            playAudio(message.delta);
         },
         onReceivedInputAudioBufferSpeechStarted: () => {
             stopAudioPlayer();
@@ -150,6 +157,26 @@ function CoffeeApp() {
                 timestamp: new Date()
             };
             setTranscripts(prev => [...prev, newTranscriptItem]);
+
+            if (awaitingGreetingDoneRef.current && isSessionActiveRef.current) {
+                awaitingGreetingDoneRef.current = false;
+
+                if (!startMicInFlightRef.current) {
+                    startMicInFlightRef.current = (async () => {
+                        // If we received audio deltas for the greeting, wait until playback drains.
+                        if (greetingAudioSeenRef.current) {
+                            await waitForAudioDrain(2500);
+                            // Small extra delay for device/driver buffer drain.
+                            await new Promise(resolve => setTimeout(resolve, 150));
+                        }
+
+                        if (!isSessionActiveRef.current) return;
+                        await startAudioRecording();
+                    })().finally(() => {
+                        startMicInFlightRef.current = null;
+                    });
+                }
+            }
         }
     });
 
@@ -188,7 +215,8 @@ function CoffeeApp() {
         onError: (error: any) => console.error("Error:", error)
     });
 
-    const { reset: resetAudioPlayer, play: playAudio, stop: stopAudioPlayer } = useAudioPlayer();
+    const { reset: resetAudioPlayer, play: playAudio, stop: stopAudioPlayer, waitForDrain: waitForAudioDrain } =
+        useAudioPlayer();
     const { start: startAudioRecording, stop: stopAudioRecording } = useAudioRecorder({
         onAudioRecorded: useAzureSpeechOn ? azureSpeech.addUserAudio : realtime.addUserAudio
     });
@@ -196,17 +224,39 @@ function CoffeeApp() {
     const onToggleListening = async () => {
         if (!isRecording) {
             setSessionIdentifiers(null);
+
+            // Start session and playback immediately, but delay mic capture until the greeting finishes.
+            isSessionActiveRef.current = true;
+            awaitingGreetingDoneRef.current = !useAzureSpeechOn;
+            greetingAudioSeenRef.current = false;
+
+            await resetAudioPlayer();
+
             if (useAzureSpeechOn) {
+                // AzureSpeech mode doesn't play a synthesized greeting audio stream.
                 azureSpeech.startSession();
+                await startAudioRecording();
             } else {
                 realtime.startSession();
+
+                // Safety: if we never receive the greeting completion, start the mic after a short timeout.
+                window.setTimeout(() => {
+                    if (!isSessionActiveRef.current) return;
+                    if (!awaitingGreetingDoneRef.current) return;
+                    awaitingGreetingDoneRef.current = false;
+                    if (startMicInFlightRef.current) return;
+                    startMicInFlightRef.current = startAudioRecording().finally(() => {
+                        startMicInFlightRef.current = null;
+                    });
+                }, 5000);
             }
-            await startAudioRecording();
-            resetAudioPlayer();
+
             setIsRecording(true);
         } else {
             await stopAudioRecording();
             stopAudioPlayer();
+            isSessionActiveRef.current = false;
+            awaitingGreetingDoneRef.current = false;
             if (useAzureSpeechOn) {
                 azureSpeech.inputAudioBufferClear();
             } else {

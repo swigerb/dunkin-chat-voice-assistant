@@ -17,6 +17,8 @@ class AudioPlaybackWorklet extends AudioWorkletProcessor {
         const output = outputs[0];
         const channel = output[0];
 
+        const hadData = this.buffer.length > 0;
+
         if (this.buffer.length > channel.length) {
             const toProcess = this.buffer.slice(0, channel.length);
             this.buffer = this.buffer.slice(channel.length);
@@ -24,6 +26,10 @@ class AudioPlaybackWorklet extends AudioWorkletProcessor {
         } else {
             channel.set(this.buffer.map(v => v / 32768));
             this.buffer = [];
+        }
+
+        if (hadData && this.buffer.length === 0) {
+            this.port.postMessage({ type: "drained" });
         }
 
         return true;

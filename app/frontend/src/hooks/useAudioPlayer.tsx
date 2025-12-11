@@ -7,9 +7,9 @@ const SAMPLE_RATE = 24000;
 export default function useAudioPlayer() {
     const audioPlayer = useRef<Player>();
 
-    const reset = () => {
+    const reset = async () => {
         audioPlayer.current = new Player();
-        audioPlayer.current.init(SAMPLE_RATE);
+        await audioPlayer.current.init(SAMPLE_RATE);
     };
 
     const play = (base64Audio: string) => {
@@ -24,5 +24,9 @@ export default function useAudioPlayer() {
         audioPlayer.current?.stop();
     };
 
-    return { reset, play, stop };
+    const waitForDrain = async (timeoutMs?: number) => {
+        return (await audioPlayer.current?.waitForDrain(timeoutMs)) ?? false;
+    };
+
+    return { reset, play, stop, waitForDrain };
 }
