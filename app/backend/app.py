@@ -57,8 +57,6 @@ async def create_app() -> web.Application:
         deployment=llm_deployment,
         voice_choice=os.environ.get("AZURE_OPENAI_REALTIME_VOICE_CHOICE") or "coral"
     )
-    if api_version := os.environ.get("AZURE_OPENAI_REALTIME_API_VERSION"):
-        rtmt.api_version = api_version
     rtmt.temperature = 0.6
     rtmt.system_message = (
         "You are Dunkin's always-on virtual crew member, proudly representing Inspire Brands. "
@@ -84,7 +82,10 @@ async def create_app() -> web.Application:
         content_field=os.environ.get("AZURE_SEARCH_CONTENT_FIELD") or "description",
         embedding_field=os.environ.get("AZURE_SEARCH_EMBEDDING_FIELD") or "embedding",
         title_field=os.environ.get("AZURE_SEARCH_TITLE_FIELD") or "name",
-        use_vector_query=_get_bool_env("AZURE_SEARCH_USE_VECTOR_QUERY", True)
+        use_vector_query=_get_bool_env("AZURE_SEARCH_USE_VECTOR_QUERY", True),
+        # The free search SKU has no semantic ranker; asking for one returns
+        # HTTP 400 on every query. main.bicep emits the effective level.
+        use_semantic_ranker=(os.environ.get("AZURE_SEARCH_SEMANTIC_RANKER") or "standard").lower() != "disabled",
     )
 
     rtmt.attach_to_app(app, "/realtime")

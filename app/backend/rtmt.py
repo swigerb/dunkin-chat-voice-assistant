@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
@@ -15,6 +16,133 @@ from order_state import SessionIdentifiers, order_state_singleton
 logger = logging.getLogger("coffee-chat")
 
 __all__ = ["RTMiddleTier", "RTToolCall", "Tool", "ToolResult", "ToolResultDirection"]
+
+
+# GA → legacy event name translation for client compatibility.
+# The frontend expects legacy names; the GA /openai/v1 endpoint sends these.
+_GA_TO_LEGACY_EVENTS: dict[str, str] = {
+    "response.output_audio.delta": "response.audio.delta",
+    "response.output_audio.done": "response.audio.done",
+    "response.output_audio_transcript.delta": "response.audio_transcript.delta",
+    "response.output_audio_transcript.done": "response.audio_transcript.done",
+    "response.output_text.delta": "response.text.delta",
+    "response.output_text.done": "response.text.done",
+}
+
+# High-frequency server message types that can be forwarded with minimal processing.
+_PASSTHROUGH_SERVER_TYPES = frozenset({
+    # GA event names
+    "response.output_audio.delta",
+    "response.output_audio.done",
+    "response.output_audio_transcript.delta",
+    "response.output_audio_transcript.done",
+    "response.output_text.delta",
+    "response.output_text.done",
+    # Legacy event names
+    "response.audio.delta",
+    "response.audio.done",
+    "response.audio_transcript.delta",
+    "response.audio_transcript.done",
+    "response.text.delta",
+    "response.text.done",
+    # Unchanged across versions
+    "response.content_part.added",
+    "response.content_part.done",
+    "input_audio_buffer.speech_started",
+    "input_audio_buffer.speech_stopped",
+    "input_audio_buffer.committed",
+    "rate_limits.updated",
+})
+
+# Client messages that never need modification.
+_PASSTHROUGH_CLIENT_TYPES = frozenset({
+    "input_audio_buffer.append",
+    "input_audio_buffer.clear",
+    "input_audio_buffer.commit",
+})
+
+# Regex to extract "type":"..." from raw JSON without full parse.
+_TYPE_RE = re.compile(r'"type"\s*:\s*"([^"]+)"')
+
+
+# Session keys the GA realtime API accepts at the top level. Anything else that
+# the legacy (2024-10-01-preview) clients send is dropped, because GA rejects
+# unknown parameters outright instead of ignoring them.
+_GA_SESSION_TOP_LEVEL = frozenset({
+    "type", "model", "instructions", "tools", "tool_choice",
+    "max_output_tokens", "output_modalities", "audio", "tracing",
+    "include", "prompt", "truncation",
+})
+
+# Legacy audio formats were bare strings ("pcm16"); GA expects an object.
+_GA_AUDIO_FORMATS = {
+    "pcm16": {"type": "audio/pcm", "rate": 24000},
+    "g711_ulaw": {"type": "audio/pcmu"},
+    "g711_alaw": {"type": "audio/pcma"},
+}
+
+
+def _ga_audio_format(value: Any) -> Any:
+    if isinstance(value, str):
+        return _GA_AUDIO_FORMATS.get(value, {"type": "audio/pcm", "rate": 24000})
+    return value
+
+
+def _to_ga_session(session: dict) -> dict:
+    """Translate a legacy realtime `session` object into the GA shape.
+
+    The browser client speaks the 2024-10-01-preview dialect. The GA endpoint
+    moved most audio settings under `audio.input` / `audio.output`, renamed a
+    couple of fields, requires a `type` discriminator, and errors on unknown
+    parameters rather than ignoring them. Doing the translation here keeps the
+    client contract stable and keeps the failure modes in one place.
+    """
+    ga: dict = dict(session)
+    audio: dict = dict(ga.get("audio") or {})
+    audio_in: dict = dict(audio.get("input") or {})
+    audio_out: dict = dict(audio.get("output") or {})
+
+    # input side
+    if (turn_detection := ga.pop("turn_detection", None)) is not None:
+        audio_in["turn_detection"] = turn_detection
+    if (transcription := ga.pop("input_audio_transcription", None)) is not None:
+        audio_in["transcription"] = transcription
+    if (in_fmt := ga.pop("input_audio_format", None)) is not None:
+        audio_in["format"] = _ga_audio_format(in_fmt)
+    if (noise := ga.pop("input_audio_noise_reduction", None)) is not None:
+        audio_in["noise_reduction"] = noise
+
+    # output side
+    if (voice := ga.pop("voice", None)) is not None:
+        audio_out["voice"] = voice
+    if (out_fmt := ga.pop("output_audio_format", None)) is not None:
+        audio_out["format"] = _ga_audio_format(out_fmt)
+    if (speed := ga.pop("speed", None)) is not None:
+        audio_out["speed"] = speed
+
+    # renamed top-level fields
+    if (max_tokens := ga.pop("max_response_output_tokens", None)) is not None:
+        ga["max_output_tokens"] = max_tokens
+    if (modalities := ga.pop("modalities", None)) is not None:
+        ga["output_modalities"] = modalities
+
+    if audio_in:
+        audio["input"] = audio_in
+    if audio_out:
+        audio["output"] = audio_out
+    if audio:
+        ga["audio"] = audio
+
+    ga["type"] = "realtime"
+
+    # `temperature` and `disable_audio` are not part of the GA session object.
+    dropped = [k for k in ga if k not in _GA_SESSION_TOP_LEVEL]
+    for key in dropped:
+        ga.pop(key)
+    if dropped:
+        logger.debug("session.update: dropped non-GA keys %s", dropped)
+
+    return ga
 
 class ToolResultDirection(Enum):
     TO_SERVER = 1
@@ -66,7 +194,6 @@ class RTMiddleTier:
     max_tokens: int | None = None
     disable_audio: bool | None = None
     voice_choice: str | None = None
-    api_version: str = "2024-10-01-preview"
 
     def __init__(self, endpoint: str, deployment: str, credentials: AzureKeyCredential | DefaultAzureCredential, voice_choice: str | None = None):
         self.endpoint = endpoint
@@ -103,8 +230,21 @@ class RTMiddleTier:
         )
 
     async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse) -> str | None:
-        message = json.loads(msg.data)
-        updated_message = msg.data
+        data = msg.data
+
+        # FAST PATH: extract type via regex without full JSON parse.
+        # Audio deltas are ~95% of server messages — avoid json.loads entirely.
+        m = _TYPE_RE.search(data)
+        if m is not None and m.group(1) in _PASSTHROUGH_SERVER_TYPES:
+            # Translate GA event names to legacy names for client compatibility
+            event_type = m.group(1)
+            legacy_name = _GA_TO_LEGACY_EVENTS.get(event_type)
+            if legacy_name is not None:
+                data = data.replace(f'"{event_type}"', f'"{legacy_name}"', 1)
+            return data
+
+        message = json.loads(data)
+        updated_message = data
         session_id = self._session_map.get(client_ws)
         if message is not None:
             match message["type"]:
@@ -124,13 +264,20 @@ class RTMiddleTier:
 
                 case "response.output_item.added":
                     if "item" in message and message["item"]["type"] == "function_call":
+                        item = message["item"]
+                        call_id = item.get("call_id")
+                        if call_id and call_id not in self._tools_pending:
+                            self._tools_pending[call_id] = RTToolCall(call_id, "")
                         updated_message = None
 
-                case "conversation.item.created":
+                case "conversation.item.created" | "conversation.item.added":
                     if "item" in message and message["item"]["type"] == "function_call":
                         item = message["item"]
                         if item["call_id"] not in self._tools_pending:
-                            self._tools_pending[item["call_id"]] = RTToolCall(item["call_id"], message["previous_item_id"])
+                            self._tools_pending[item["call_id"]] = RTToolCall(item["call_id"], message.get("previous_item_id", ""))
+                        else:
+                            # Upgrade fallback from output_item.added with the correct previous_item_id
+                            self._tools_pending[item["call_id"]] = RTToolCall(item["call_id"], message.get("previous_item_id", ""))
                         updated_message = None
                     elif "item" in message and message["item"]["type"] == "function_call_output":
                         updated_message = None
@@ -144,35 +291,37 @@ class RTMiddleTier:
                 case "response.output_item.done":
                     if "item" in message and message["item"]["type"] == "function_call":
                         item = message["item"]
-                        tool_call = self._tools_pending[message["item"]["call_id"]]
-                        tool = self.tools[item["name"]]
-                        args = item["arguments"]
-                        if item["name"] in ["update_order", "get_order"]:
-                            result = await tool.target(json.loads(args), session_id)
+                        tool_call = self._tools_pending.get(item["call_id"])
+                        if tool_call is None:
+                            logger.warning("Tool call %s not found in pending tools", item["call_id"])
+                            updated_message = None
                         else:
-                            result = await tool.target(json.loads(args))
-                        await server_ws.send_json({
-                            "type": "conversation.item.create",
-                            "item": {
-                                "type": "function_call_output",
-                                "call_id": item["call_id"],
-                                "output": result.to_text() if result.destination == ToolResultDirection.TO_SERVER else ""
-                            }
-                        })
-                        if result.destination == ToolResultDirection.TO_CLIENT:
-                            # TODO: this will break clients that don't know about this extra message, rewrite 
-                            # this to be a regular text message with a special marker of some sort
-                            await client_ws.send_json({
-                                "type": "extension.middle_tier_tool_response",
-                                "previous_item_id": tool_call.previous_id,
-                                "tool_name": item["name"],
-                                "tool_result": result.to_text()
+                            tool = self.tools[item["name"]]
+                            args = item["arguments"]
+                            if item["name"] in ["update_order", "get_order"]:
+                                result = await tool.target(json.loads(args), session_id)
+                            else:
+                                result = await tool.target(json.loads(args))
+                            await server_ws.send_json({
+                                "type": "conversation.item.create",
+                                "item": {
+                                    "type": "function_call_output",
+                                    "call_id": item["call_id"],
+                                    "output": result.to_text() if result.destination == ToolResultDirection.TO_SERVER else ""
+                                }
                             })
-                        updated_message = None
+                            if result.destination == ToolResultDirection.TO_CLIENT:
+                                await client_ws.send_json({
+                                    "type": "extension.middle_tier_tool_response",
+                                    "previous_item_id": tool_call.previous_id,
+                                    "tool_name": item["name"],
+                                    "tool_result": result.to_text()
+                                })
+                            updated_message = None
 
                 case "response.done":
                     if len(self._tools_pending) > 0:
-                        self._tools_pending.clear() # Any chance tool calls could be interleaved across different outstanding responses?
+                        self._tools_pending.clear()
                         await server_ws.send_json({
                             "type": "response.create"
                         })
@@ -194,8 +343,16 @@ class RTMiddleTier:
         return updated_message
 
     async def _process_message_to_server(self, msg: str, ws: web.WebSocketResponse) -> str | None:
-        message = json.loads(msg.data)
-        updated_message = msg.data
+        data = msg.data
+
+        # FAST PATH: input_audio_buffer.append is the most frequent client message.
+        # Skip JSON parse entirely — it never needs modification.
+        m = _TYPE_RE.search(data)
+        if m is not None and m.group(1) in _PASSTHROUGH_CLIENT_TYPES:
+            return data
+
+        message = json.loads(data)
+        updated_message = data
         if message is not None:
             match message["type"]:
                 case "session.update":
@@ -212,13 +369,17 @@ class RTMiddleTier:
                         session["voice"] = self.voice_choice
                     session["tool_choice"] = "auto" if len(self.tools) > 0 else "none"
                     session["tools"] = [tool.schema for tool in self.tools.values()]
+                    # Translate to the GA shape so the browser contract is unchanged
+                    # and unsupported legacy keys are dropped rather than rejected.
+                    session = _to_ga_session(session)
+                    message["session"] = session
                     updated_message = json.dumps(message)
 
         return updated_message
 
     async def _forward_messages(self, ws: web.WebSocketResponse):
         async with aiohttp.ClientSession(base_url=self.endpoint) as session:
-            params = { "api-version": self.api_version, "deployment": self.deployment}
+            params = {"model": self.deployment}
             headers = {}
             if "x-ms-client-request-id" in ws.headers:
                 headers["x-ms-client-request-id"] = ws.headers["x-ms-client-request-id"]
@@ -226,7 +387,7 @@ class RTMiddleTier:
                 headers = { "api-key": self.key }
             else:
                 headers = { "Authorization": f"Bearer {self._token_provider()}" } # NOTE: no async version of token provider, maybe refresh token on a timer?
-            async with session.ws_connect("/openai/realtime", headers=headers, params=params) as target_ws:
+            async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params) as target_ws:
                 session_id = self._session_map.get(ws)
                 greeting_sent = session_id in self._sent_greeting
 

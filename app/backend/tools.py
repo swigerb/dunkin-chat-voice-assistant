@@ -115,6 +115,7 @@ async def search(
     embedding_field: str,
     use_vector_query: bool,
     args: Any,
+    use_semantic_ranker: bool = True,
 ) -> ToolResult:
     """Execute a hybrid Azure AI Search query with safe fallbacks."""
 
@@ -139,28 +140,37 @@ async def search(
         "sizes",
     }
 
+    # Build query kwargs — only request semantic ranker when available.
+    # The free search SKU has no semantic ranker and returns HTTP 400 if asked.
+    search_kwargs: dict[str, Any] = {
+        "search_text": query,
+        "top": 5,
+        "vector_queries": vector_queries or None,
+        "select": list(select_fields),
+    }
+    if use_semantic_ranker:
+        search_kwargs["query_type"] = "semantic"
+        search_kwargs["semantic_configuration_name"] = semantic_configuration
+
     try:
-        search_results = await search_client.search(
-            search_text=query,
-            query_type="semantic",
-            semantic_configuration_name=semantic_configuration,
-            top=5,
-            vector_queries=vector_queries or None,
-            select=list(select_fields),
-        )
+        search_results = await search_client.search(**search_kwargs)
     except HttpResponseError as exc:
-        # Gracefully handle schema/field mismatches (e.g., invalid $select fields) by retrying with a minimal projection.
-        if "Could not find a property named" in str(exc):
+        # Runtime fallback: if semantic ranker was requested but fails (e.g.,
+        # free tier), retry without it rather than surfacing an error.
+        if use_semantic_ranker and ("semantic" in str(exc).lower() or exc.status_code == 400):
+            logger.warning("Semantic ranker failed (SKU may not support it); retrying without: %s", exc)
+            search_kwargs.pop("query_type", None)
+            search_kwargs.pop("semantic_configuration_name", None)
+            try:
+                search_results = await search_client.search(**search_kwargs)
+            except HttpResponseError as inner_exc:
+                logger.error("Azure AI Search fallback also failed: %s", inner_exc)
+                return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)
+        elif "Could not find a property named" in str(exc):
             logger.warning("Retrying search with minimal fields after select mismatch: %s", exc)
             fallback_select = [identifier_field or "id", content_field or "description"]
-            search_results = await search_client.search(
-                search_text=query,
-                query_type="semantic",
-                semantic_configuration_name=semantic_configuration,
-                top=5,
-                vector_queries=vector_queries or None,
-                select=[f for f in fallback_select if f],
-            )
+            search_kwargs["select"] = [f for f in fallback_select if f]
+            search_results = await search_client.search(**search_kwargs)
         else:
             logger.error("Azure AI Search request failed: %s", exc)
             return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)
@@ -292,6 +302,7 @@ def attach_tools_rtmt(
     embedding_field: str,
     title_field: str,
     use_vector_query: bool,
+    use_semantic_ranker: bool = True,
 ) -> None:
     """Attach search and order tools to the RTMiddleTier instance."""
 
@@ -299,7 +310,7 @@ def attach_tools_rtmt(
         credentials.get_token("https://search.azure.com/.default")  # warm up prior to first call
     search_client = SearchClient(search_endpoint, search_index, credentials, user_agent="RTMiddleTier")
 
-    rtmt.tools["search"] = Tool(schema=search_tool_schema, target=lambda args: search(search_client, semantic_configuration, identifier_field, content_field, embedding_field, use_vector_query, args))
+    rtmt.tools["search"] = Tool(schema=search_tool_schema, target=lambda args: search(search_client, semantic_configuration, identifier_field, content_field, embedding_field, use_vector_query, args, use_semantic_ranker))
     rtmt.tools["update_order"] = Tool(schema=update_order_tool_schema, target=lambda args, session_id: update_order(args, session_id))
     rtmt.tools["get_order"] = Tool(schema=get_order_tool_schema, target=lambda args, session_id: get_order(args, session_id))
 

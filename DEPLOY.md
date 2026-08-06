@@ -34,3 +34,67 @@ After testing locally, deploy the application with:
     --context ./app \
     coffee-chat-assistant
 ```
+
+## Deploy with azd
+
+The recommended deployment method uses Azure Developer CLI:
+
+```bash
+azd up
+```
+
+This provisions all infrastructure (Container Apps, AI Search, OpenAI, Storage)
+and deploys the application. The `postprovision` hook automatically sets up the
+search index with menu embeddings.
+
+## EasyAuth (Entra ID Authentication) — Optional
+
+The template supports opt-in Entra ID authentication via Container Apps EasyAuth.
+When enabled, only users in your tenant (or assigned app roles) can access the app.
+
+### Prerequisites
+
+1. Register an App Registration in your Entra ID tenant
+2. Set `appRoleAssignmentRequired = true` on the service principal to restrict
+   access to named individuals (without this, any tenant member can sign in)
+3. Create a client secret and note the value
+
+### Enable via azd env
+
+```bash
+azd env set AZURE_AUTH_ENABLED true
+azd env set AZURE_AUTH_CLIENT_ID <YOUR-APP-CLIENT-ID>
+azd env set AZURE_AUTH_TENANT_ID <YOUR-TENANT-ID>
+azd env set AZURE_AUTH_CLIENT_SECRET <YOUR-CLIENT-SECRET>
+```
+
+Then run `azd up` to deploy with auth enabled.
+
+### How it works
+
+- `enableAuth` and `authClientId` parameters gate the auth module — both must be
+  truthy for the `container-app-auth.bicep` module to deploy.
+- The client secret is stored as a Container App secret named `aad-client-secret`
+  and referenced by `clientSecretSettingName`. **No secret value appears in any
+  template or source file.**
+- If you redeploy with auth unset, ensure the `authClientSecret` parameter is
+  still populated (via `azd env`) so the secret isn't deleted from the container
+  app, which would break auth while it still appears enabled.
+
+### Disabling auth
+
+To disable, clear the variables and redeploy:
+
+```bash
+azd env set AZURE_AUTH_ENABLED false
+azd up
+```
+
+## Semantic Ranker (Free SKU Note)
+
+When deploying with `AZURE_SEARCH_SERVICE_SKU=free`, the free tier has **no
+semantic ranker**. The Bicep template automatically detects this and sets
+`AZURE_SEARCH_SEMANTIC_RANKER=disabled` in the container app environment.
+The application code falls back to keyword + vector search when the ranker
+is disabled, so menu lookups continue to work.
+
