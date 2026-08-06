@@ -1,5 +1,5 @@
 # Stage 1: Build the Vite app
-FROM node:20-slim AS build-stage
+FROM node:22-slim AS build-stage
 
 # Set the working directory inside the container
 WORKDIR /frontend

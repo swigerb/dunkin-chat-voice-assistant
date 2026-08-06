@@ -43,3 +43,9 @@
 - Added 3 tests to test_app.py covering: default voice "coral", closing phrase "Please pull around to the next window", and get_order tool instruction in system prompt
 - `create_app` can be tested by mocking `RTMiddleTier` class and `attach_tools_rtmt`, with `RUNNING_IN_PRODUCTION=1` to skip .env loading
 - All 59 backend tests pass
+
+## Stage 1: Test Hygiene (2026-08-06)
+- **Backend baseline:** 59 tests, 3 pre-existing errors (test_app.py static dir). Fixed by creating static/index.html in setUp. Now 59 pass, 0 fail.
+- **Frontend baseline:** 13 tests, 5 files — all pass. Unchanged after upgrade (React 19 + Vitest 2 + jsdom 29).
+- **Flaky test search:** No datetime.now/date.today/discount/happy-hour/promo logic found in either backend or frontend tests. No time-dependent pricing in this demo.
+- **No regressions from dependency upgrades.**

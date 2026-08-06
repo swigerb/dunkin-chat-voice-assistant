@@ -39,6 +39,16 @@ class GetBoolEnvTests(unittest.TestCase):
 class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
     """Tests for create_app voice choice and system prompt configuration."""
 
+    def setUp(self):
+        # create_app registers a static route that requires the directory to exist
+        self._static_dir = Path(__file__).resolve().parents[1] / "static"
+        self._static_dir.mkdir(exist_ok=True)
+        # aiohttp also needs index.html to serve the FileResponse route
+        index_html = self._static_dir / "index.html"
+        if not index_html.exists():
+            index_html.write_text("<html></html>")
+        self._created_index = not index_html.exists()
+
     async def _run_create_app(self):
         """Run create_app with mocked Azure services; return (class_mock, instance_mock)."""
         with patch("app.RTMiddleTier") as mock_cls, \

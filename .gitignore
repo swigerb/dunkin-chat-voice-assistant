@@ -155,3 +155,9 @@ data/**/*.md5
 
 .DS_Store
 data/transformed_menu_items/
+.squad/orchestration-log/
+.squad/log/
+.squad/decisions/inbox/
+.squad/sessions/
+.squad/.cache/
+.squad-workstream

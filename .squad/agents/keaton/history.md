@@ -22,3 +22,11 @@
 - **Fenster (Backend):** Successfully modernized all backend files to Python 3.11+. Ruff errors reduced 29→0. All 56 tests pass.
 - **McManus (Frontend):** Completed code quality pass on 8 files. Eliminated all `any` types. Fixed critical ref bug in grounding-files.tsx. All 13 tests pass.
 - **Hockney (Tester):** Expanded test coverage dramatically: backend 9→56 tests, frontend 4→13 tests. 6 new test files created. All passing.
+
+## Stage 1: Dependencies + Tooling Modernization (2026-08-06)
+- **squad upgrade:** v0.11.0 — squad doctor 0 failures
+- **Python deps:** Fixed 44 CVEs → 0. aiohttp 3.10.11→3.14.3, azure-search-documents 11.6→12.0, python-dotenv 1.0.1→1.2.2, cryptography pinned >=50.0.0,<51, azure-identity 1.19→1.25.3, cffi 1.17.1→2.1.1, openai 1.54.3→1.109.1, rich 13.9.4→15.0.0
+- **azure-search-documents 12.0 migration:** AzureOpenAIParameters→AzureOpenAIVectorizerParameters, resource_uri→resource_url, deployment_id→deployment_name in setup_intvect.py
+- **Node runtime:** 18/20→22 (Dockerfile, CI, devcontainer)
+- **Missing roles gap:** No DevOps agent (infra/CI/CD coverage), no AI/Realtime specialist (rtmt.py, prompt tuning, WebSocket patterns). Sonic has Squanchy + Unity; McDonald's has Mayor McCheese + Mac Tonight. Recommend adding parity roles.
+- **Did NOT touch:** rtmt.py API surface, infra/ bicep, azure.yaml (Stage 2 scope)

@@ -29,3 +29,10 @@
 - **Keaton (Lead):** Completed full codebase audit with 7 P0, 7 P1, 7 P2 findings. Provided cleanup framework.
 - **McManus (Frontend):** Eliminated all `any` types in useAzureSpeech.tsx. Fixed critical ref bug in grounding-files.tsx.
 - **Hockney (Tester):** Expanded backend test suite 9→56 tests. All passing. Comprehensive model and utility coverage.
+
+## Stage 1: Backend Dependency Security (2026-08-06)
+- **pip-audit BEFORE:** 44 vulnerabilities (34 aiohttp, 1 python-dotenv, 9 cryptography)
+- **pip-audit AFTER:** 0 vulnerabilities
+- **azure-search-documents 12.0:** Migrated setup_intvect.py — AzureOpenAIParameters→AzureOpenAIVectorizerParameters, resource_uri→resource_url, deployment_id→deployment_name
+- **ruff check:** 1 isort fix (setup_intvect.py alphabetical ordering after rename), now clean
+- **Tests:** 59 pass (fixed pre-existing test_app.py static dir issue — tests now create the dir in setUp)

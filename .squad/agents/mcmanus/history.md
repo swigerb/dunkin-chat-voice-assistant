@@ -26,3 +26,14 @@
 - **Keaton (Lead):** Identified critical ref bug in grounding-files.tsx and comprehensive cleanup roadmap.
 - **Fenster (Backend):** Modernized backend to Python 3.11+. All 56 tests pass. No behavioral changes.
 - **Hockney (Tester):** Expanded frontend test suite 4→13 tests. All passing. Comprehensive component coverage.
+
+## Stage 1: Frontend Modernization (2026-08-06)
+- **React 18→19**, Vite 5→6, Vitest 1→2, Tailwind 3→4, TypeScript 5.5→5.8, jsdom 24→29, i18next 23→26, @testing-library/react 14→16
+- **Tailwind 4 migration:** Deleted tailwind.config.js, rewrote index.css with @import 'tailwindcss' + @theme + @plugin, switched postcss to @tailwindcss/postcss, removed autoprefixer
+- **Class renames:** shadow-sm→shadow-xs, bg-gradient-to-→bg-linear-to-, outline-none→outline-hidden, flex-grow→grow, backdrop-blur-sm→backdrop-blur-xs across 8 files
+- **lucide-react 1.x:** Github icon removed — swapped to FaGithub from react-icons
+- **react-draggable:** Removed (unused dependency, findDOMNode removed in React 19)
+- **useRef() React 19:** Added null initial values in useAudioPlayer.tsx and useAudioRecorder.tsx
+- **Brand preserved:** All Dunkin brand vars (brand-orange, brand-pink, brand-cream, brand-brown, Fredoka font) confirmed in built CSS
+- **CSS size:** 33,972→47,932 bytes (TW4 generates more utilities by default; acceptable for demo)
+- **Build:** tsc + vite build clean. **Tests:** 13 pass (5 files, unchanged count)

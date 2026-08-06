@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Mic, MicOff, Menu, MessageSquare, LogOut, Github } from "lucide-react";
+import { Mic, MicOff, Menu, MessageSquare, LogOut } from "lucide-react";
+import { FaGithub } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
 
 import { Card } from "@/components/ui/card";
@@ -286,7 +287,7 @@ function CoffeeApp() {
                         className="inline-flex items-center gap-1 rounded-full bg-white/80 px-3 py-1 text-primary transition hover:text-accent"
                         title="View Dunkin Voice Crew source"
                     >
-                        <Github className="h-4 w-4" />
+                        <FaGithub className="h-4 w-4" />
                         <span>Source on GitHub</span>
                     </a>
                     <div className="flex items-center gap-2">
@@ -407,7 +408,7 @@ function BrandHero() {
             <div className="flex flex-col gap-8 lg:flex-row lg:items-center">
                 <div className="flex-1 space-y-5">
                     <div className="flex flex-wrap items-center gap-3">
-                        <img src={dunkinLogo} alt="Dunkin logo" className="h-10 w-auto drop-shadow-sm" loading="lazy" />
+                        <img src={dunkinLogo} alt="Dunkin logo" className="h-10 w-auto drop-shadow-xs" loading="lazy" />
                         <span className="rounded-full bg-[#FFE3CB] px-3 py-1 text-xs font-black uppercase tracking-[0.3em] text-[#C14200]">
                             Voice Crew Demo
                         </span>
@@ -428,7 +429,7 @@ function BrandHero() {
                     </div>
                 </div>
                 <div className="relative flex flex-1 items-center justify-center">
-                    <div className="absolute inset-0 -z-10 rounded-[32px] bg-gradient-to-br from-[#FFE0CF] via-[#FFF3EC] to-[#FFE4F5] opacity-80 blur-3xl"></div>
+                    <div className="absolute inset-0 -z-10 rounded-[32px] bg-linear-to-br from-[#FFE0CF] via-[#FFF3EC] to-[#FFE4F5] opacity-80 blur-3xl"></div>
                     <div className="grid w-full gap-4 sm:grid-cols-2">
                         <div className="rounded-3xl border border-[#FF9F45]/30 bg-white/90 p-4 shadow-[0_25px_45px_rgba(255,103,31,0.2)]">
                             <div className="mb-3 flex items-center gap-3">
@@ -449,7 +450,7 @@ function BrandHero() {
                                 ))}
                             </ul>
                         </div>
-                        <div className="rounded-3xl border border-[#E3007F]/25 bg-gradient-to-br from-[#FFE5F2] to-[#FFECE0] p-4 shadow-[0_25px_45px_rgba(227,0,127,0.15)]">
+                        <div className="rounded-3xl border border-[#E3007F]/25 bg-linear-to-br from-[#FFE5F2] to-[#FFECE0] p-4 shadow-[0_25px_45px_rgba(227,0,127,0.15)]">
                             <div className="mb-3 flex items-center gap-3">
                                 <div className="rounded-2xl bg-white/60 p-3">
                                     <CoffeeArt />
@@ -479,7 +480,7 @@ function HeroHighlightCard({ title, detail, tone }: { title: string; detail: str
     };
 
     return (
-        <div className={`rounded-2xl bg-gradient-to-br ${gradientMap[tone]} p-3 text-white shadow-[0_10px_25px_rgba(0,0,0,0.08)]`}>
+        <div className={`rounded-2xl bg-linear-to-br ${gradientMap[tone]} p-3 text-white shadow-[0_10px_25px_rgba(0,0,0,0.08)]`}>
             <p className="text-xs uppercase tracking-[0.25em] text-white/80">{title}</p>
             <p className="text-sm font-semibold leading-tight">{detail}</p>
         </div>
@@ -491,7 +492,7 @@ function SessionTokenBanner({ identifiers }: { identifiers: SessionIdentifiersSt
     const truncatedRoundTrip = formatToken(identifiers.roundTripToken, 6);
 
     return (
-        <div className="flex flex-wrap gap-2 rounded-3xl border border-white/40 bg-white/90 p-3 font-mono text-xs text-primary shadow-sm">
+        <div className="flex flex-wrap gap-2 rounded-3xl border border-white/40 bg-white/90 p-3 font-mono text-xs text-primary shadow-xs">
             <div className="flex items-center gap-2" title={identifiers.sessionToken}>
                 <span className="rounded-full bg-[#FFE3CB] px-2 py-1 font-semibold uppercase tracking-widest text-[#C14200]">Session Token</span>
                 <span className="text-sm text-[#7A2E10]">{truncatedSession}</span>

@@ -8,8 +8,8 @@ from azure.identity import AzureDeveloperCliCredential
 from azure.search.documents.indexes import SearchIndexClient, SearchIndexerClient
 from azure.search.documents.indexes.models import (
     AzureOpenAIEmbeddingSkill,
-    AzureOpenAIParameters,
     AzureOpenAIVectorizer,
+    AzureOpenAIVectorizerParameters,
     FieldMapping,
     HnswAlgorithmConfiguration,
     HnswParameters,
@@ -103,9 +103,9 @@ def setup_index(azure_credential, index_name, azure_search_endpoint, azure_stora
                     vectorizers=[
                         AzureOpenAIVectorizer(
                             name="openai_vectorizer",
-                            azure_open_ai_parameters=AzureOpenAIParameters(
-                                resource_uri=azure_openai_embedding_endpoint,
-                                deployment_id=azure_openai_embedding_deployment,
+                            azure_open_ai_parameters=AzureOpenAIVectorizerParameters(
+                                resource_url=azure_openai_embedding_endpoint,
+                                deployment_name=azure_openai_embedding_deployment,
                                 model_name=azure_openai_embedding_model
                             )
                         )
@@ -144,9 +144,9 @@ def setup_index(azure_credential, index_name, azure_search_endpoint, azure_stora
                         outputs=[OutputFieldMappingEntry(name="textItems", target_name="pages")]),
                     AzureOpenAIEmbeddingSkill(
                         context="/document/pages/*",
-                        resource_uri=azure_openai_embedding_endpoint,
+                        resource_url=azure_openai_embedding_endpoint,
                         api_key=None,
-                        deployment_id=azure_openai_embedding_deployment,
+                        deployment_name=azure_openai_embedding_deployment,
                         model_name=azure_openai_embedding_model,
                         dimensions=azure_openai_embeddings_dimensions,
                         inputs=[InputFieldMappingEntry(name="text", source="/document/pages/*")],
