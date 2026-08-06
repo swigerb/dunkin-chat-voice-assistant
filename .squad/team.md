@@ -15,5 +15,7 @@
 | McManus | Frontend Dev | React, TypeScript, Vite, Tailwind, UI components | ⚛️ |
 | Fenster | Backend Dev | Python, aiohttp, Azure SDKs, WebSocket, API design | 🔧 |
 | Hockney | Tester | Unit tests, E2E tests, quality, edge cases | 🧪 |
+| Verbal | DevOps | Bicep, azd, Container Apps, Docker, CI, EasyAuth | ⚙️ |
+| Kobayashi | AI / Realtime Expert | Realtime API, WebSocket middle tier, prompts, voice | 🤖 |
 | Scribe | Session Logger | Memory, decisions, session logs | 📋 |
 | Ralph | Work Monitor | — | 🔄 Monitor |
