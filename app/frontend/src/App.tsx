@@ -94,10 +94,17 @@ function CoffeeApp() {
         const stored = localStorage.getItem("showSessionTokens");
         return stored === null ? true : stored === "true";
     });
+    const [voiceChoice, setVoiceChoice] = useState<string>(() => {
+        return localStorage.getItem("voiceChoice") || "coral";
+    });
 
     useEffect(() => {
         localStorage.setItem("showSessionTokens", showSessionTokens.toString());
     }, [showSessionTokens]);
+
+    useEffect(() => {
+        localStorage.setItem("voiceChoice", voiceChoice);
+    }, [voiceChoice]);
 
     const handleSessionIdentifiers = useCallback((message: ExtensionSessionMetadata | ExtensionRoundTripToken) => {
         setSessionIdentifiers({
@@ -237,6 +244,7 @@ function CoffeeApp() {
                 await startAudioRecording();
             } else {
                 realtime.startSession();
+                realtime.sendVoiceChoice(voiceChoice);
 
                 // Safety: if we never receive the greeting completion, start the mic after a short timeout.
                 window.setTimeout(() => {
@@ -295,6 +303,11 @@ function CoffeeApp() {
                             isMobile={isMobile}
                             showSessionTokens={showSessionTokens}
                             onShowSessionTokensChange={setShowSessionTokens}
+                            voiceChoice={voiceChoice}
+                            onVoiceChoiceChange={(voice: string) => {
+                                setVoiceChoice(voice);
+                                realtime.sendVoiceChoice(voice);
+                            }}
                         />
                         {authEnabled && (
                             <Button variant="ghost" size="icon" className="rounded-full" onClick={logout} title="Logout">

@@ -2,6 +2,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -12,7 +13,8 @@ class OrderStateTests(unittest.TestCase):
     def setUp(self):
         order_state_singleton.sessions = {}
 
-    def test_create_session_initializes_empty_summary(self):
+    @patch("order_state.is_happy_hour", return_value=False)
+    def test_create_session_initializes_empty_summary(self, _mock_hh):
         session_id = order_state_singleton.create_session()
         summary = order_state_singleton.get_order_summary(session_id)
 
@@ -21,7 +23,8 @@ class OrderStateTests(unittest.TestCase):
         self.assertEqual(summary.tax, 0)
         self.assertEqual(summary.finalTotal, 0)
 
-    def test_handle_order_update_adds_and_updates_totals(self):
+    @patch("order_state.is_happy_hour", return_value=False)
+    def test_handle_order_update_adds_and_updates_totals(self, _mock_hh):
         session_id = order_state_singleton.create_session()
         order_state_singleton.handle_order_update(session_id, "add", "Caramel Craze Latte", "medium", 2, 4.99)
         order_state_singleton.handle_order_update(session_id, "add", "Glazed Donut", "standard", 1, 1.49)

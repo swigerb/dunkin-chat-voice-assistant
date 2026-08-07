@@ -144,6 +144,15 @@ def _to_ga_session(session: dict) -> dict:
 
     return ga
 
+# Valid voices for the GA realtime API.
+_VALID_VOICES = frozenset({
+    "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"
+})
+
+# Fast marker for extension.set_voice detection.
+_MARKER_SET_VOICE = '"extension.set_voice"'
+
+
 class ToolResultDirection(Enum):
     TO_SERVER = 1
     TO_CLIENT = 2
@@ -410,13 +419,40 @@ class RTMiddleTier:
                     if session_id is not None:
                         self._sent_greeting.add(session_id)
                 async def from_client_to_server():
+                    session_configured = False
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
                             if not greeting_sent:
                                 await send_greeting_once()
+
+                            # Intercept extension.set_voice — don't forward to OpenAI
+                            if _MARKER_SET_VOICE in msg.data:
+                                try:
+                                    ext_msg = json.loads(msg.data)
+                                    if ext_msg.get("type") == "extension.set_voice":
+                                        new_voice = ext_msg.get("voice", "")
+                                        if new_voice in _VALID_VOICES:
+                                            previous_voice = self.voice_choice
+                                            self.voice_choice = new_voice
+                                            logger.info("[VOICE] Voice change: %s → %s", previous_voice, new_voice)
+                                            if session_configured:
+                                                # Mid-session: send GA-shaped session.update
+                                                ga_session = _to_ga_session({"voice": new_voice})
+                                                await target_ws.send_str(json.dumps({
+                                                    "type": "session.update",
+                                                    "session": ga_session,
+                                                }))
+                                            # else: pre-session — voice included in next full session.update
+                                        continue
+                                except (json.JSONDecodeError, KeyError):
+                                    pass
+
                             new_msg = await self._process_message_to_server(msg, ws)
                             if new_msg is not None:
                                 await target_ws.send_str(new_msg)
+                                # Mark session configured after first session.update
+                                if not session_configured and '"session.update"' in msg.data:
+                                    session_configured = True
                         else:
                             logger.warning("Unexpected message type from client: %s", msg.type)
                     

@@ -1,0 +1,32 @@
+# Centralized configuration for Dunkin Voice Chat Assistant backend.
+# Changes take effect on next startup.
+
+model:
+  temperature: 0.6
+  max_response_output_tokens: 4096
+  # Warm, confident voice for the Dunkin crew persona.
+  default_voice: "coral"
+
+vad:
+  type: "server_vad"
+  threshold: 0.7
+  prefix_padding_ms: 300
+  silence_duration_ms: 500
+
+business_rules:
+  tax_rate: 0.08
+  max_item_quantity: 10
+  max_order_items: 25
+  # Afternoon Iced & Espresso Happy Hour — 2 PM to 5 PM store-local time.
+  # Eligible categories: iced drinks, cold brew, refreshers, and espresso-based.
+  happy_hour_start: 14
+  happy_hour_end: 17
+  happy_hour_discount: 0.75  # 25% off eligible items
+  happy_hour_categories:
+    - "cold beverages"
+    - "signature lattes"
+
+search:
+  k_nearest_neighbors: 50
+  top_results: 5
+  timeout_seconds: 10

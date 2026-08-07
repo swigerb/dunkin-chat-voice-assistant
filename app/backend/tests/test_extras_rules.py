@@ -3,6 +3,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -14,6 +15,12 @@ from tools import update_order
 class ExtrasRuleTests(unittest.TestCase):
     def setUp(self):
         order_state_singleton.sessions = {}
+        # These assert exact totals, so pin happy hour off. Without this the
+        # afternoon discount silently changes the arithmetic and the suite
+        # passes or fails depending on the wall clock.
+        self._hh = patch("order_state.is_happy_hour", return_value=False)
+        self._hh.start()
+        self.addCleanup(self._hh.stop)
 
     def _add_item(self, session_id: str, name: str, size: str, qty: int, price: float):
         order_state_singleton.handle_order_update(session_id, "add", name, size, qty, price)

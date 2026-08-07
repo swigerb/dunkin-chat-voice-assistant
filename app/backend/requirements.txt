@@ -8,5 +8,7 @@ gunicorn==23.0.0
 openai==1.109.1
 pydantic>=2,<3
 python-dotenv==1.2.2
+PyYAML>=6.0,<7
 rich==15.0.0
 cryptography>=50.0.0,<51
+tzdata>=2024.1; sys_platform == "win32"

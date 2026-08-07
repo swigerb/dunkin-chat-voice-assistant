@@ -1,12 +1,43 @@
 import logging
+import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+from config_loader import get_config
 from models import OrderItem, OrderSummary
 
-__all__ = ["OrderState", "SessionIdentifiers", "order_state_singleton"]
+__all__ = ["OrderState", "SessionIdentifiers", "order_state_singleton", "is_happy_hour"]
 
 logger = logging.getLogger("order_state")
+
+_config = get_config()
+_biz_cfg = _config.get("business_rules", {})
+
+# Store timezone — defaults to US Eastern (Dunkin HQ).
+_STORE_TZ = ZoneInfo(os.environ.get("STORE_TIMEZONE", "America/New_York"))
+
+# Happy-hour eligible categories (iced drinks, cold brew, espresso-based).
+_HAPPY_HOUR_CATEGORIES: set[str] = set(_biz_cfg.get("happy_hour_categories", ["cold beverages", "signature lattes"]))
+
+
+def is_happy_hour() -> bool:
+    """Check if the current time is within the happy hour window (store-local time)."""
+    now = datetime.now(_STORE_TZ)
+    start = _biz_cfg.get("happy_hour_start", 14)
+    end = _biz_cfg.get("happy_hour_end", 17)
+    return start <= now.hour < end
+
+
+def _infer_happy_hour_category(item_name: str) -> str:
+    """Lightweight category inference for happy-hour eligibility."""
+    normalized = item_name.lower()
+    if "latte" in normalized:
+        return "signature lattes"
+    if any(kw in normalized for kw in ("cold brew", "refresher", "iced", "cold")):
+        return "cold beverages"
+    return ""
 
 
 @dataclass
@@ -27,10 +58,18 @@ class OrderState:
 
     def _update_summary(self, session_id: str):
         session = self.sessions[session_id]
-        total = sum(item.price * item.quantity for item in session["order_state"])
-        tax = total * 0.08  # 8% tax
+        order_items = session["order_state"]
+        happy_hour = is_happy_hour()
+        discount = _biz_cfg.get("happy_hour_discount", 0.75)
+        total = 0.0
+        for item in order_items:
+            item_total = item.price * item.quantity
+            if happy_hour and _infer_happy_hour_category(item.item) in _HAPPY_HOUR_CATEGORIES:
+                item_total *= discount
+            total += item_total
+        tax = total * _biz_cfg.get("tax_rate", 0.08)
         finalTotal = total + tax
-        session["order_summary"] = OrderSummary(items=session["order_state"], total=total, tax=tax, finalTotal=finalTotal)
+        session["order_summary"] = OrderSummary(items=order_items, total=total, tax=tax, finalTotal=finalTotal)
         logger.info(f"Order Summary Updated for session {session_id}: {session['order_summary']}")
 
     def create_session(self) -> str:

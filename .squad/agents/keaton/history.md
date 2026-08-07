@@ -30,3 +30,40 @@
 - **Node runtime:** 18/20→22 (Dockerfile, CI, devcontainer)
 - **Missing roles gap:** No DevOps agent (infra/CI/CD coverage), no AI/Realtime specialist (rtmt.py, prompt tuning, WebSocket patterns). Sonic has Squanchy + Unity; McDonald's has Mayor McCheese + Mac Tonight. Recommend adding parity roles.
 - **Did NOT touch:** rtmt.py API surface, infra/ bicep, azure.yaml (Stage 2 scope)
+
+## Stage 2: Feature Parity — Voice Picker, Happy Hour, Quantity Limits (2026-08-06)
+
+### Voice Picker (Task 1)
+- Added `sendVoiceChoice()` to `useRealtime.tsx` → sends `{ type: "extension.set_voice", voice }`.
+- `App.tsx` owns `voiceChoice` state, persists to `localStorage("voiceChoice")`, syncs on startup.
+- `settings.tsx` renders a `<select>` with all 10 GA voices (alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar) + descriptors.
+- `rtmt.py` intercepts `extension.set_voice` in the forwarding loop. Pre-session: stores voice for next `session.update`. Mid-session: sends a GA-shaped `session.update` with `audio.output.voice` via `_to_ga_session()`.
+- **GA routing:** `_to_ga_session()` already maps legacy `voice` → `session.audio.output.voice`. The `extension.set_voice` handler leverages this same path.
+- Default: `coral` (from env `AZURE_OPENAI_REALTIME_VOICE_CHOICE`, fallback in app.py).
+- Piper/local-mode voice selector intentionally omitted per Brian's instruction.
+
+### Happy Hour (Task 2)
+- **Window:** 2 PM – 5 PM store-local time (Eastern default). Dunkin's afternoon is the natural iced-drink/espresso lull period.
+- **Eligible categories:** "cold beverages" and "signature lattes" — i.e., cold brews, refreshers, iced drinks, and espresso-based lattes. NOT donuts, NOT breakfast sandwiches.
+- **Discount:** 25% off (multiplier 0.75). Sonic uses 50% on slushes/drinks (aggressive fast-food play); Dunkin's margins are tighter on specialty coffee, so 25% is more realistic.
+- **Reasoning:** Dunkin's afternoon traffic competes with Starbucks cold-drink sales; discounting iced/espresso items in the 2-5 PM window mirrors real Dunkin promotions ("Afternoon Pick-Me-Up").
+- Config in `config.yaml` → `business_rules.happy_hour_*`. 8% flat tax preserved and applied AFTER discount.
+- All pricing tests patch `is_happy_hour` where it's used (`order_state.is_happy_hour`) — no wall-clock dependency.
+
+### Quantity Limits (Task 3)
+- `MAX_QUANTITY_PER_ITEM = 10`, `MAX_TOTAL_ITEMS = 25` — configured in `config.yaml`.
+- Per-item: rejects if `existing_qty + requested > 10`. Partial-add offer if room remains.
+- Total order: rejects if `sum(all_items) + requested > 25`.
+- Rejection returns `ToolResultDirection.TO_SERVER` with a conversational message ending in `?` so the AI relays naturally.
+- Remove actions bypass all limits (always allowed).
+
+### Files Changed
+- **New:** `config.yaml`, `config_loader.py`, `tests/test_happy_hour.py`, `tests/test_quantity_limits.py`, `tests/test_voice_change.py`
+- **Modified:** `order_state.py`, `rtmt.py`, `tools.py`, `requirements.txt`, `tests/test_order_state.py`, `App.tsx`, `settings.tsx`, `useRealtime.tsx`
+
+### Validation
+- `python -m pytest app/backend -q`: **103 passed** (was 81)
+- `ruff check .`: All checks passed
+- `npm run build`: ✓ built in 2s
+- `npm test`: 13 passed (5 files)
+- Mutation checks: 4 mutations across happy-hour and quantity-limit code — all detected by tests

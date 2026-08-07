@@ -13,9 +13,11 @@ interface SettingsProps {
     isMobile: boolean;
     showSessionTokens: boolean;
     onShowSessionTokensChange: (checked: boolean) => void;
+    voiceChoice: string;
+    onVoiceChoiceChange: (voice: string) => void;
 }
 
-export default function Settings({ isMobile, showSessionTokens, onShowSessionTokensChange }: SettingsProps) {
+export default function Settings({ isMobile, showSessionTokens, onShowSessionTokensChange, voiceChoice, onVoiceChoiceChange }: SettingsProps) {
     const [isDarkMode, setIsDarkMode] = useState(() => {
         return localStorage.getItem("isDarkMode") === "true";
     });
@@ -59,6 +61,34 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                 <div className="ml-4 flex flex-col items-end">
                     <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={handleDarkModeChange} aria-label="Toggle dark mode" />
                     <span className="text-xs text-gray-500 dark:text-gray-400">{isDarkMode ? "Dark Mode" : "Light Mode"}</span>
+                </div>
+            </div>
+            <div className="flex items-start justify-between">
+                <div className="flex-1 space-y-0.5">
+                    <Label htmlFor="voice-choice" className="text-gray-900 dark:text-gray-100">
+                        AI Voice
+                    </Label>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Choose your drive-thru assistant's voice</p>
+                </div>
+                <div className="ml-4 flex flex-col items-end">
+                    <select
+                        id="voice-choice"
+                        value={voiceChoice}
+                        onChange={(e) => onVoiceChoiceChange(e.target.value)}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    >
+                        <option value="alloy">Alloy — Neutral &amp; Versatile</option>
+                        <option value="ash">Ash — Warm &amp; Friendly</option>
+                        <option value="ballad">Ballad — Caring &amp; Soft</option>
+                        <option value="coral">Coral — Confident &amp; Clear</option>
+                        <option value="echo">Echo — Smooth &amp; Resonant</option>
+                        <option value="sage">Sage — Calm &amp; Thoughtful</option>
+                        <option value="shimmer">Shimmer — Cheerful &amp; Bright</option>
+                        <option value="verse">Verse — Natural &amp; Adaptable</option>
+                        <option value="marin">Marin — Fresh &amp; Modern</option>
+                        <option value="cedar">Cedar — Deep &amp; Grounded</option>
+                    </select>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Default: Coral</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">

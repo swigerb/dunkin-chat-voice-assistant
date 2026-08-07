@@ -10,12 +10,19 @@ from azure.identity import DefaultAzureCredential
 from azure.search.documents.aio import SearchClient
 from azure.search.documents.models import VectorizableTextQuery
 
+from config_loader import get_config
 from order_state import order_state_singleton
 from rtmt import RTMiddleTier, Tool, ToolResult, ToolResultDirection
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["attach_tools_rtmt"]
+__all__ = ["attach_tools_rtmt", "update_order", "MAX_QUANTITY_PER_ITEM", "MAX_TOTAL_ITEMS"]
+
+_config = get_config()
+_biz_cfg = _config.get("business_rules", {})
+
+MAX_QUANTITY_PER_ITEM: int = _biz_cfg.get("max_item_quantity", 10)
+MAX_TOTAL_ITEMS: int = _biz_cfg.get("max_order_items", 25)
 
 
 # Extras may only be applied to specific beverage categories.
@@ -237,37 +244,89 @@ async def update_order(args, session_id: str) -> ToolResult:
     logger.info("Updating order for session %s with payload %s", session_id, args)
 
     item_name = args["item_name"]
-    if args["action"] == "add" and _is_extra_item(item_name):
+    action = args["action"]
+    size = args.get("size", "")
+    quantity = args.get("quantity", 0)
+
+    # ── Quantity limits (add only) ──
+    if action == "add":
         current_items = order_state_singleton.get_order_summary(session_id).items
-        has_allowed_base = False
-        has_blocked_base = False
 
+        # Per-item limit
+        existing_qty = 0
         for order_item in current_items:
-            category = _infer_category(order_item.item)
-            if category in ALLOWED_EXTRA_CATEGORIES:
-                has_allowed_base = True
-            if category in BLOCKED_EXTRA_CATEGORIES:
-                has_blocked_base = True
+            if order_item.item == item_name and order_item.size == size:
+                existing_qty = order_item.quantity
+                break
+        new_item_qty = existing_qty + quantity
+        if new_item_qty > MAX_QUANTITY_PER_ITEM:
+            allowed = MAX_QUANTITY_PER_ITEM - existing_qty
+            if allowed <= 0:
+                msg = (
+                    f"That's a lot of {item_name}! We can do up to "
+                    f"{MAX_QUANTITY_PER_ITEM} of any one item. You already have {existing_qty} — "
+                    f"would you like to keep it at {existing_qty}?"
+                )
+            else:
+                msg = (
+                    f"That's a lot of {item_name}! We can do up to "
+                    f"{MAX_QUANTITY_PER_ITEM} of any one item. I can add {allowed} more — "
+                    f"would you like me to do that?"
+                )
+            logger.info("Per-item limit hit for '%s' in session %s (requested %d, existing %d)",
+                        item_name, session_id, quantity, existing_qty)
+            return ToolResult(msg, ToolResultDirection.TO_SERVER)
 
-        if not has_allowed_base:
-            apology = (
-                "I can add extras to signature lattes or cold beverages, "
-                "but not to donuts or breakfast sandwiches."
-            )
-            if has_blocked_base:
+        # Total order limit
+        total_qty = sum(oi.quantity for oi in current_items) + quantity
+        if total_qty > MAX_TOTAL_ITEMS:
+            remaining = MAX_TOTAL_ITEMS - sum(oi.quantity for oi in current_items)
+            if remaining <= 0:
+                msg = (
+                    f"Wow, that's a big order! Our drive-thru tops out at "
+                    f"{MAX_TOTAL_ITEMS} items total so we can keep things moving. "
+                    f"You're already at the max — would you like to swap anything out?"
+                )
+            else:
+                msg = (
+                    f"Wow, that's a big order! Our drive-thru tops out at "
+                    f"{MAX_TOTAL_ITEMS} items total so we can keep things moving. "
+                    f"I can add {remaining} more — would you like me to do that?"
+                )
+            logger.info("Total order limit hit in session %s (would be %d items)", session_id, total_qty)
+            return ToolResult(msg, ToolResultDirection.TO_SERVER)
+
+        # Extras validation
+        if _is_extra_item(item_name):
+            has_allowed_base = False
+            has_blocked_base = False
+
+            for order_item in current_items:
+                category = _infer_category(order_item.item)
+                if category in ALLOWED_EXTRA_CATEGORIES:
+                    has_allowed_base = True
+                if category in BLOCKED_EXTRA_CATEGORIES:
+                    has_blocked_base = True
+
+            if not has_allowed_base:
                 apology = (
                     "I can add extras to signature lattes or cold beverages, "
-                    "but I can't add them to donuts or breakfast sandwiches."
+                    "but not to donuts or breakfast sandwiches."
                 )
-            logger.info("Blocked extra '%s' for session %s", item_name, session_id)
-            return ToolResult(apology, ToolResultDirection.TO_SERVER)
+                if has_blocked_base:
+                    apology = (
+                        "I can add extras to signature lattes or cold beverages, "
+                        "but I can't add them to donuts or breakfast sandwiches."
+                    )
+                logger.info("Blocked extra '%s' for session %s", item_name, session_id)
+                return ToolResult(apology, ToolResultDirection.TO_SERVER)
 
     order_state_singleton.handle_order_update(
         session_id,
-        args["action"],
+        action,
         item_name,
-        args["size"],
-        args.get("quantity", 0),
+        size,
+        quantity,
         args.get("price", 0.0),
     )
 

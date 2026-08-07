@@ -162,5 +162,9 @@ export default function useRealTime({
         onReceivedError
     ]);
 
-    return { startSession, addUserAudio, inputAudioBufferClear };
+    const sendVoiceChoice = (voice: string) => {
+        sendJsonMessage({ type: "extension.set_voice", voice });
+    };
+
+    return { startSession, addUserAudio, inputAudioBufferClear, sendVoiceChoice };
 }
