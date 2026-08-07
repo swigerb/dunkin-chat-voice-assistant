@@ -55,8 +55,14 @@ When enabled, only users in your tenant (or assigned app roles) can access the a
 ### Prerequisites
 
 1. Register an App Registration in your Entra ID tenant
-2. Set `appRoleAssignmentRequired = true` on the service principal to restrict
-   access to named individuals (without this, any tenant member can sign in)
+2. Optionally set `appRoleAssignmentRequired = true` on the service principal to
+   restrict access to named individuals (without this, any tenant member can
+   sign in). **Warning:** enabling this disables user self-consent, so the first
+   sign-in fails with "Need admin approval" until someone holding Application
+   Administrator, Cloud Application Administrator or Global Administrator runs
+   `az ad app permission admin-consent --id <app-id>`. Global *Reader* is not
+   sufficient. If you have no admin account to hand, leave this off — the app is
+   single-tenant, so sign-in is still limited to your own tenant.
 3. Create a client secret and note the value
 
 ### Enable via azd env
