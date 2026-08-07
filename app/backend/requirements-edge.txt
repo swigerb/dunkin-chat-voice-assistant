@@ -1,0 +1,6 @@
+# Edge-only dependencies for Azure Local deployments.
+# Install alongside the main requirements.txt:
+#   pip install -r requirements.txt -r requirements-edge.txt
+chromadb>=1.0.0,<2
+onnxruntime>=1.18.0,<2
+tokenizers>=0.19.0,<1

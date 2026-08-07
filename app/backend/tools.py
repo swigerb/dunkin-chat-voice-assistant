@@ -16,7 +16,7 @@ from rtmt import RTMiddleTier, Tool, ToolResult, ToolResultDirection
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["attach_tools_rtmt", "update_order", "MAX_QUANTITY_PER_ITEM", "MAX_TOTAL_ITEMS"]
+__all__ = ["attach_tools_rtmt", "search_chromadb", "update_order", "MAX_QUANTITY_PER_ITEM", "MAX_TOTAL_ITEMS"]
 
 _config = get_config()
 _biz_cfg = _config.get("business_rules", {})
@@ -204,6 +204,38 @@ async def search(
     return ToolResult(joined_results or "No matching menu entries found.", ToolResultDirection.TO_SERVER)
 
 
+async def search_chromadb(collection: Any, args: Any) -> ToolResult:
+    """Execute a local ChromaDB vector search query (edge / Azure Local only)."""
+
+    query = args["query"]
+    logger.info("ChromaDB knowledge search requested for query '%s'", query)
+
+    try:
+        results = collection.query(
+            query_texts=[query],
+            n_results=5,
+            include=["documents", "metadatas"],
+        )
+    except Exception as exc:
+        logger.error("ChromaDB search failed: %s", exc)
+        return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)
+
+    formatted = []
+    if results and results.get("ids") and results["ids"][0]:
+        for i, doc_id in enumerate(results["ids"][0]):
+            meta = results["metadatas"][0][i] if results["metadatas"] else {}
+            summary = (
+                f"[{doc_id}]: "
+                f"Name: {meta.get('name', 'N/A')}, Category: {meta.get('category', 'N/A')}, "
+                f"Description: {meta.get('description', 'N/A')}, Sizes: {meta.get('sizes', 'N/A')}"
+            )
+            formatted.append(summary)
+
+    joined_results = "\n-----\n".join(formatted)
+    logger.debug("ChromaDB search returned %d documents", len(formatted))
+    return ToolResult(joined_results or "No matching menu entries found.", ToolResultDirection.TO_SERVER)
+
+
 update_order_tool_schema = {
     "type": "function",
     "name": "update_order",
@@ -359,25 +391,42 @@ async def get_order(_args: Any, session_id: str) -> ToolResult:
 
 def attach_tools_rtmt(
     rtmt: RTMiddleTier,
-    credentials: AzureKeyCredential | DefaultAzureCredential,
-    search_endpoint: str,
-    search_index: str,
-    semantic_configuration: str,
-    identifier_field: str,
-    content_field: str,
-    embedding_field: str,
-    title_field: str,
-    use_vector_query: bool,
+    credentials: AzureKeyCredential | DefaultAzureCredential | None = None,
+    search_endpoint: str | None = None,
+    search_index: str | None = None,
+    semantic_configuration: str = "",
+    identifier_field: str = "id",
+    content_field: str = "description",
+    embedding_field: str = "embedding",
+    title_field: str = "name",
+    use_vector_query: bool = True,
     use_semantic_ranker: bool = True,
+    *,
+    use_local_pipeline: bool = False,
+    chroma_collection: Any = None,
 ) -> None:
-    """Attach search and order tools to the RTMiddleTier instance."""
+    """Attach search and order tools to the RTMiddleTier instance.
 
-    if not isinstance(credentials, AzureKeyCredential):
-        credentials.get_token("https://search.azure.com/.default")  # warm up prior to first call
-    search_client = SearchClient(search_endpoint, search_index, credentials, user_agent="RTMiddleTier")
+    When *use_local_pipeline* is True, binds the ChromaDB search
+    implementation (edge / Azure Local).  Otherwise binds the Azure AI
+    Search implementation (cloud default).
+    """
 
-    rtmt.tools["search"] = Tool(schema=search_tool_schema, target=lambda args: search(search_client, semantic_configuration, identifier_field, content_field, embedding_field, use_vector_query, args, use_semantic_ranker))
+    if use_local_pipeline:
+        if chroma_collection is None:
+            raise ValueError("chroma_collection is required when use_local_pipeline is True")
+        rtmt.tools["search"] = Tool(
+            schema=search_tool_schema,
+            target=lambda args: search_chromadb(chroma_collection, args),
+        )
+    else:
+        if not isinstance(credentials, AzureKeyCredential):
+            credentials.get_token("https://search.azure.com/.default")  # warm up prior to first call
+        search_client = SearchClient(search_endpoint, search_index, credentials, user_agent="RTMiddleTier")
+        rtmt.tools["search"] = Tool(schema=search_tool_schema, target=lambda args: search(search_client, semantic_configuration, identifier_field, content_field, embedding_field, use_vector_query, args, use_semantic_ranker))
+
     rtmt.tools["update_order"] = Tool(schema=update_order_tool_schema, target=lambda args, session_id: update_order(args, session_id))
     rtmt.tools["get_order"] = Tool(schema=get_order_tool_schema, target=lambda args, session_id: get_order(args, session_id))
+
 
 
