@@ -151,6 +151,19 @@ static/
 # TypeScript
 *.tsbuildinfo
 
+# CRM database (generated at runtime)
+app/backend/data/crm.db
+
+# ChromaDB vector store (generated)
+app/backend/chroma_data/
+
+# Employee dashboard build artifacts
+app/employee-dashboard/src/**/*.js
+app/employee-dashboard/src/**/*.d.ts
+!app/employee-dashboard/src/**/*.config.js
+app/employee-dashboard/vite.config.js
+app/employee-dashboard/vite.config.d.ts
+
 data/**/*.md5
 
 .DS_Store

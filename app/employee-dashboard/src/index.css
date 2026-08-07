@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dunkin-orange: #FF671F;
+  --color-dunkin-pink: #E3007F;
+  --color-dunkin-sand: #FFEBD2;
+  --color-dunkin-cocoa: #7A2E10;
+}
+
+body {
+  font-family: "Space Grotesk", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

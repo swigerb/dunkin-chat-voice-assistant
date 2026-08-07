@@ -1,0 +1,138 @@
+{
+  "customers": [
+    {
+      "id": "cust-sarah-kim",
+      "name": "Sarah Kim",
+      "rewards_status": "Gold",
+      "loyalty_score": 860,
+      "loyalty_goal": 1200,
+      "curbside_preferred": true,
+      "bluetooth_devices": [
+        { "mac": "B4-8C-9D-11-22-33", "label": "Jeep Compass" }
+      ],
+      "favorite_items": [
+        { "item": "Iced Latte", "size": "Large", "quantity": 1, "price": 4.89 },
+        { "item": "Avocado Toast", "size": null, "quantity": 1, "price": 3.19 }
+      ],
+      "usual_order": [
+        { "item": "Iced Latte", "size": "Large", "quantity": 1, "price": 4.89 },
+        { "item": "Avocado Toast", "size": null, "quantity": 1, "price": 3.19 }
+      ],
+      "suggested_sales": [
+        "Add sweet cold foam for $1.25",
+        "Try the new Mango Pineapple refresher"
+      ],
+      "suggestions": [
+        {
+          "headline": "Sarah's Usual",
+          "description": "Large iced latte with oat milk and avocado toast",
+          "items": [
+            { "item": "Iced Latte", "size": "Large", "quantity": 1 },
+            { "item": "Avocado Toast", "quantity": 1 }
+          ]
+        }
+      ],
+      "last_visit_iso": "2026-03-08T11:45:00-05:00"
+    },
+    {
+      "id": "cust-jamal-roberts",
+      "name": "Jamal Roberts",
+      "rewards_status": "Platinum",
+      "loyalty_score": 1260,
+      "loyalty_goal": 1500,
+      "curbside_preferred": false,
+      "bluetooth_devices": [
+        { "mac": "88-5F-66-41-2C-90", "label": "Ford F150 Sync" }
+      ],
+      "favorite_items": [
+        { "item": "Cold Brew", "size": "Medium", "quantity": 1, "price": 3.69 },
+        { "item": "Bacon Egg and Cheese", "size": null, "quantity": 1, "price": 4.59 }
+      ],
+      "usual_order": [
+        { "item": "Cold Brew", "size": "Medium", "quantity": 1 },
+        { "item": "Bacon Egg and Cheese", "quantity": 1 }
+      ],
+      "suggested_sales": [
+        "Offer caramel cold foam topper",
+        "Suggest hash browns add-on"
+      ],
+      "suggestions": [
+        {
+          "headline": "Crew Pick",
+          "description": "Cold brew with sweet cold foam plus bacon egg and cheese on croissant",
+          "items": [
+            { "item": "Cold Brew", "size": "Medium", "quantity": 1 },
+            { "item": "Bacon Egg and Cheese", "quantity": 1 }
+          ]
+        }
+      ],
+      "last_visit_iso": "2026-03-10T07:12:00-05:00"
+    },
+    {
+      "id": "cust-lena-ortiz",
+      "name": "Lena Ortiz",
+      "rewards_status": "Silver",
+      "loyalty_score": 540,
+      "loyalty_goal": 1000,
+      "curbside_preferred": true,
+      "bluetooth_devices": [
+        { "mac": "A0-BC-D4-55-19-EE", "label": "Mini Cooper" }
+      ],
+      "favorite_items": [
+        { "item": "Caramel Craze Latte", "size": "Medium", "quantity": 1, "price": 4.59 },
+        { "item": "Glazed Donut", "size": null, "quantity": 1, "price": 1.49 }
+      ],
+      "usual_order": [
+        { "item": "Caramel Craze Latte", "size": "Medium", "quantity": 1 },
+        { "item": "Glazed Donut", "quantity": 1 }
+      ],
+      "suggested_sales": [
+        "Promote seasonal donut",
+        "Offer boost shot for latte"
+      ],
+      "suggestions": [
+        {
+          "headline": "Weekend Treat",
+          "description": "Medium Caramel Craze Latte with glazed donut",
+          "items": [
+            { "item": "Caramel Craze Latte", "size": "Medium", "quantity": 1 },
+            { "item": "Glazed Donut", "quantity": 1 }
+          ]
+        }
+      ],
+      "last_visit_iso": "2026-03-09T15:20:00-05:00"
+    },
+    {
+      "id": "cust-devon-lee",
+      "name": "Devon Lee",
+      "rewards_status": "Bronze",
+      "loyalty_score": 240,
+      "loyalty_goal": 800,
+      "curbside_preferred": false,
+      "bluetooth_devices": [
+        { "mac": "5C-77-E6-0D-47-AB", "label": "Model Y" }
+      ],
+      "favorite_items": [
+        { "item": "Iced Matcha Latte", "size": "Large", "quantity": 1, "price": 4.99 }
+      ],
+      "usual_order": [
+        { "item": "Iced Matcha Latte", "size": "Large", "quantity": 1 }
+      ],
+      "suggested_sales": [
+        "Recommend blueberry muffin",
+        "Promote rewards challenge"
+      ],
+      "suggestions": [
+        {
+          "headline": "Matcha Moment",
+          "description": "Large iced matcha latte with blueberry muffin",
+          "items": [
+            { "item": "Iced Matcha Latte", "size": "Large", "quantity": 1 },
+            { "item": "Blueberry Muffin", "quantity": 1 }
+          ]
+        }
+      ],
+      "last_visit_iso": "2026-03-05T09:04:00-05:00"
+    }
+  ]
+}
