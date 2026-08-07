@@ -123,3 +123,54 @@
 - WebSocket `/dashboard` real-time event flow (requires running server)
 - CRM Bluetooth MAC lookup with real hardware
 - Demo fleet auto-spawning under load
+
+## 2026-08-07 — Sprint 5: Documentation Port & Rework
+
+**Branch:** `sprint/docs` (from `dev`)
+
+### Documents Produced
+1. **`docs/Demo/8-minute-demo-script.md`** — Full narrated 8-minute live demo script for technical audiences.
+2. **`docs/demo-guide.md`** — Consolidated presenter guide (merged demo-guide + demo-cheat-sheet from contributor branches).
+3. **`docs/foundry-local-architecture.md`** — Opt-in Foundry Local pipeline topology, clearly scoped to `USE_LOCAL_PIPELINE=true`.
+
+### Consolidation Decision
+- The contributor's `demo-guide.md` and `demo-cheat-sheet.md` overlapped ~80% (same talking points, same Q&A, same cluster commands). Consolidated into one `demo-guide.md` with a "Quick Reference" section providing 30-sec / 2-min / 5-min versions. Three overlapping docs would confuse presenters.
+
+### Stale Statements Corrected
+| Statement | Was (April contributor branch) | Now (August dev) |
+|---|---|---|
+| Realtime model | `gpt-4o-realtime-preview` | `gpt-realtime-1.5` (GA, version 2026-02-23) |
+| API surface | `/openai/realtime?api-version=2024-10-01-preview` | `/openai/v1/realtime?model=` (GA surface) |
+| Default menu search | "ChromaDB handles menu retrieval" | Azure AI Search is default; ChromaDB only when `USE_LOCAL_PIPELINE=true` |
+| Edge image | Not mentioned | `Dockerfile.edge` with `requirements-edge.txt` |
+| Domain | `dunkin.adaptivecloudlab.com` | `<your-domain>` (placeholder convention from azure-local-deployment.md) |
+| ACR | `cadunkinacr` | `<your-acr>` |
+| Fork URL | `mgodfre3/dunkin-chat-voice-assistant` | `<your-org>/<your-repo>` |
+| Site name | `california` | `<your-site>` / `example-site` |
+
+### New Content Added (Sprint 3 & 4 features)
+- Voice picker (10 GA voices, live swap, settings dialog, `session.update`)
+- Crew dashboard — what it shows, how to launch (`app/employee-dashboard/`), Demo Controls
+- Happy hour (2–5 PM, 25% off cold beverages + signature lattes)
+- Quantity limits (10 per item, 25 per order, conversational refusal)
+- Extras validation (whipped cream / swirls / shots only on eligible categories)
+- Authentication position (public by default, Entra ID opt-in)
+
+### Also Fixed
+- Stale `gpt-4o-realtime-preview` in `docs/azure-local-deployment.md`, `docs/existing_services.md`, `docs/manual_setup.md` → `gpt-realtime-1.5`
+- README TOC updated with "Demo & Presentation Guides" section
+
+### Validation Results
+- `python -m pytest app/backend -q` → **139 passed** ✓
+- `ruff check .` → All checks passed ✓
+- `npm run build` (frontend) → Built in 5.46s ✓
+- `npm test` (frontend) → 13 passed ✓
+- Internal links: all 18 referenced paths verified present ✓
+- Grep `mgodfre3` / `cadunkinacr` / `adaptivecloudlab` → only in azure-local-deployment.md "Example" column ✓
+- Grep `gpt-4o-realtime` / `2024-10-01` / `openai/realtime?` → zero matches ✓
+- `git status --short` → only intended doc files ✓
+
+### Items Flagging for Human Review
+- `flux/apps/dunkin-voice/configmap.yaml` still has `AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"` — this is live infra config, not docs, so I did not modify it per the "documentation only" rule. It should be updated when the deployment model is rotated.
+- The `.env-sample` shows `gpt-realtime-mini` which may need updating to `gpt-realtime-1.5` — again, application config, not docs scope.
+
