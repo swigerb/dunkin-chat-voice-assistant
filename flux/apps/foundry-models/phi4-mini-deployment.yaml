@@ -1,0 +1,29 @@
+# Phi-4 Mini GPU model deployment via Azure AI Foundry Local operator.
+# REQUIRES: GPU node(s) with the nvidia-device-plugin DaemonSet running,
+# and the foundry-local-operator Helm release installed.
+apiVersion: foundrylocal.azure.com/v1
+kind: ModelDeployment
+metadata:
+  name: phi-4-mini-gpu
+  namespace: foundry-local-operator
+  labels:
+    app.kubernetes.io/name: phi-4-mini-gpu
+    app.kubernetes.io/component: inference
+    foundry.azure.com/hardware: gpu
+spec:
+  displayName: "Phi-4 Mini GPU"
+  model:
+    catalog:
+      name: Phi-4-mini-instruct-cuda-gpu
+      version: "5"
+  workloadType: generative
+  compute: gpu
+  replicas: 1
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "4"
+      memory: "5Gi"
+      gpu: 1

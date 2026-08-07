@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: piper-tts
+  namespace: dunkin-voice
+  labels:
+    app.kubernetes.io/name: piper-tts
+    app.kubernetes.io/component: text-to-speech
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: piper-tts
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: piper-tts
+        app.kubernetes.io/component: text-to-speech
+    spec:
+      containers:
+        - name: piper
+          image: kamilkrawiec/piper-openai-tts:latest
+          ports:
+            - containerPort: 5000
+              name: http
+          env:
+            - name: PORT
+              value: "5000"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "256Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          volumeMounts:
+            - name: voice-cache
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 5000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+      volumes:
+        - name: voice-cache
+          emptyDir:
+            sizeLimit: 2Gi

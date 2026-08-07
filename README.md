@@ -30,6 +30,7 @@ Beyond coffee fans, this sample demonstrates how Microsoft’s Responsible AI gu
     - [Option 1: Direct Local Execution (Recommended for Development)](#option-1-direct-local-execution-recommended-for-development)
     - [Option 2: Docker-based Local Execution](#option-2-docker-based-local-execution)
   - [Deploying to Azure](#deploying-to-azure)
+  - [Deploying to Azure Local (Edge)](#deploying-to-azure-local-edge)
   - [Contributing](#contributing)
   - [Resources](#resources)
 
@@ -264,6 +265,24 @@ To deploy the app to a production environment in Azure:
    ```
 
 4. After deployment completes, your app will be available at the URL displayed in the console.
+
+## Deploying to Azure Local (Edge)
+
+For on-premises or edge deployments, the app can run on an **Azure Local** cluster (AKS Arc) with Flux GitOps and optional on-prem model serving (Phi-4 Mini, Whisper STT, Piper TTS).
+
+This is an **alternative** to Azure Container Apps — both paths coexist and share the same application code. Choose Azure Local when you need low-latency edge processing, data sovereignty, or offline-capable AI inference.
+
+👉 **Full guide:** [docs/azure-local-deployment.md](docs/azure-local-deployment.md)
+
+Quick start:
+
+```bash
+# Script-based deploy
+cp .env.template .env   # populate with your values
+./scripts/deploy-edge.sh
+
+# Or use Flux GitOps — see the full guide for setup
+```
 
 ## License
 

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: piper-tts
+  namespace: dunkin-voice
+  labels:
+    app.kubernetes.io/name: piper-tts
+    app.kubernetes.io/component: text-to-speech
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: piper-tts
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+      name: http

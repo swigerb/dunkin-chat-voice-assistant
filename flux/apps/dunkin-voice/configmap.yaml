@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dunkin-config
+  namespace: dunkin-voice
+data:
+  RUNNING_IN_PRODUCTION: "true"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  CHROMA_DATA_PATH: "/app/chroma_data"
+  CHROMA_COLLECTION_NAME: "menu_items"
+  # Hybrid mode: Azure OpenAI Realtime for voice, local ChromaDB for search
+  USE_LOCAL_PIPELINE: "false"
+  # Azure OpenAI Realtime
+  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "coral"
+  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"
+  AZURE_OPENAI_EASTUS2_ENDPOINT: "wss://acx-dunkin-edge-openai.openai.azure.com/"
