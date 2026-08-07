@@ -167,10 +167,17 @@ async def search(
                 logger.error("Azure AI Search fallback also failed: %s", inner_exc)
                 return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)
         elif "Could not find a property named" in str(exc):
-            logger.warning("Retrying search with minimal fields after select mismatch: %s", exc)
-            fallback_select = [identifier_field or "id", content_field or "description"]
-            search_kwargs["select"] = [f for f in fallback_select if f]
-            search_results = await search_client.search(**search_kwargs)
+            logger.warning("Retrying search with safe literal fields after select mismatch: %s", exc)
+            # Use genuinely safe literals — the configured field may itself be the
+            # wrong name (truthy but invalid), so we must not reuse it.
+            search_kwargs["select"] = ["id", "description"]
+            search_kwargs.pop("query_type", None)
+            search_kwargs.pop("semantic_configuration_name", None)
+            try:
+                search_results = await search_client.search(**search_kwargs)
+            except HttpResponseError as inner_exc:
+                logger.error("Azure AI Search fallback with safe literals also failed: %s", inner_exc)
+                return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)
         else:
             logger.error("Azure AI Search request failed: %s", exc)
             return ToolResult("I'm sorry, I can't reach our menu data right now.", ToolResultDirection.TO_SERVER)

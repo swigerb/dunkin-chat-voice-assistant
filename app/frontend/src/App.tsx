@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Mic, MicOff, Menu, MessageSquare, LogOut } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 import { useTranslation } from "react-i18next";
@@ -99,13 +99,13 @@ function CoffeeApp() {
         localStorage.setItem("showSessionTokens", showSessionTokens.toString());
     }, [showSessionTokens]);
 
-    const handleSessionIdentifiers = (message: ExtensionSessionMetadata | ExtensionRoundTripToken) => {
+    const handleSessionIdentifiers = useCallback((message: ExtensionSessionMetadata | ExtensionRoundTripToken) => {
         setSessionIdentifiers({
             sessionToken: message.sessionToken,
             roundTripIndex: message.roundTripIndex,
             roundTripToken: message.roundTripToken
         });
-    };
+    }, []);
 
     const isSessionActiveRef = useRef(false);
     const awaitingGreetingDoneRef = useRef(false);

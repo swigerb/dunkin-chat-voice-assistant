@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import useWebSocket from "react-use-websocket";
 
 import {
@@ -108,7 +109,7 @@ export default function useRealTime({
         sendJsonMessage(command);
     };
 
-    const onMessageReceived = (event: MessageEvent<any>) => {
+    const onMessageReceived = useCallback((event: MessageEvent<any>) => {
         onWebSocketMessage?.(event);
 
         let message: Message;
@@ -148,7 +149,18 @@ export default function useRealTime({
                 onReceivedError?.(message);
                 break;
         }
-    };
+    }, [
+        onWebSocketMessage,
+        onReceivedResponseDone,
+        onReceivedResponseAudioDelta,
+        onReceivedResponseAudioTranscriptDelta,
+        onReceivedInputAudioBufferSpeechStarted,
+        onReceivedInputAudioTranscriptionCompleted,
+        onReceivedExtensionMiddleTierToolResponse,
+        onReceivedSessionMetadata,
+        onReceivedRoundTripToken,
+        onReceivedError
+    ]);
 
     return { startSession, addUserAudio, inputAudioBufferClear };
 }

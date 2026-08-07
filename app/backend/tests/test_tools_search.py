@@ -125,6 +125,49 @@ class SearchToolTests(unittest.TestCase):
         self.assertEqual(call_count, 2)
         self.assertIn("[5]", result.text)
 
+    def test_field_mismatch_fallback_uses_safe_literals_not_configured_field(self):
+        """Regression: when identifier_field is truthy but wrong, the fallback
+        must use literal 'id'/'description' rather than the configured bad name."""
+        from azure.core.exceptions import HttpResponseError
+
+        captured_selects = []
+
+        async def _capture_search(**kwargs):
+            captured_selects.append(kwargs.get("select"))
+            if len(captured_selects) == 1:
+                raise HttpResponseError(message="Could not find a property named 'chunk_id'")
+            async def _async_iter():
+                yield {"id": "ok", "description": "found it"}
+            return _async_iter()
+
+        client = AsyncMock()
+        client.search = _capture_search
+
+        # Pass a truthy but WRONG identifier_field
+        result = asyncio.run(search(
+            client, "menuSemanticConfig", "chunk_id", "chunk", "text_vector", False, {"query": "test"}
+        ))
+        # The fallback select must be the safe literals, NOT the configured bad fields
+        self.assertEqual(captured_selects[1], ["id", "description"])
+        self.assertIn("[ok]", result.text)
+
+    def test_field_mismatch_fallback_failure_returns_apology(self):
+        """When both the initial search and the fallback retry fail, the tool
+        must return an apology rather than raising an unhandled exception."""
+        from azure.core.exceptions import HttpResponseError
+
+        async def _always_fail(**kwargs):
+            raise HttpResponseError(message="Could not find a property named 'bad_field'")
+
+        client = AsyncMock()
+        client.search = _always_fail
+
+        result = asyncio.run(search(
+            client, "menuSemanticConfig", "bad_field", "bad_content", "bad_emb", False, {"query": "latte"}
+        ))
+        self.assertEqual(result.destination, ToolResultDirection.TO_SERVER)
+        self.assertIn("can't reach", result.text.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
