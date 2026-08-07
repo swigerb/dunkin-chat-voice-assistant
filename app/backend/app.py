@@ -7,6 +7,17 @@ from azure.core.credentials import AzureKeyCredential
 from azure.identity import AzureDeveloperCliCredential, DefaultAzureCredential
 from dotenv import load_dotenv
 
+from crm import CRMRepository
+from dashboard import (
+    complete_car,
+    dashboard_socket,
+    demo_status,
+    reset_lane,
+    spawn_car,
+    start_demo_mode,
+    stop_demo_mode,
+)
+from drive_thru import DriveThruDemoFleet, DriveThruSimulator
 from rtmt import RTMiddleTier
 from tools import attach_tools_rtmt
 
@@ -89,6 +100,33 @@ async def create_app() -> web.Application:
     )
 
     rtmt.attach_to_app(app, "/realtime")
+
+    # --- Drive-thru dashboard (CRM + simulator) ---
+    crm_db_path = os.environ.get("CRM_DB_PATH")
+    crm_repo = CRMRepository.from_env(crm_db_path)
+    simulator = DriveThruSimulator(max_cars=int(os.environ.get("DRIVE_THRU_MAX_CARS", "4")))
+    demo_fleet = DriveThruDemoFleet(simulator, crm_repo=crm_repo)
+    app["crm_repo"] = crm_repo
+    app["drive_thru_simulator"] = simulator
+    app["drive_thru_demo"] = demo_fleet
+
+    app.router.add_get("/dashboard", dashboard_socket)
+    app.router.add_post("/simulator/spawn", spawn_car)
+    app.router.add_post("/simulator/reset", reset_lane)
+    app.router.add_post("/simulator/complete", complete_car)
+    app.router.add_get("/simulator/demo", demo_status)
+    app.router.add_post("/simulator/demo/start", start_demo_mode)
+    app.router.add_post("/simulator/demo/stop", stop_demo_mode)
+
+    async def on_startup(_app: web.Application) -> None:
+        await simulator.start()
+
+    async def on_shutdown(_app: web.Application) -> None:
+        await demo_fleet.stop()
+        await simulator.stop()
+
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
 
     current_directory = Path(__file__).parent
     app.add_routes([web.get('/', lambda _: web.FileResponse(current_directory / 'static/index.html'))])
