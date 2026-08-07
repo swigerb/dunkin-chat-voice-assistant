@@ -10,4 +10,4 @@ data:
   CHROMA_DATA_PATH: "/app/chroma_data"
   CHROMA_COLLECTION_NAME: "menu_items"
   AZURE_OPENAI_REALTIME_VOICE_CHOICE: "coral"
-  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"
+  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-1.5"
