@@ -31,6 +31,7 @@ Beyond coffee fans, this sample demonstrates how Microsoft’s Responsible AI gu
     - [Option 2: Docker-based Local Execution](#option-2-docker-based-local-execution)
   - [Deploying to Azure](#deploying-to-azure)
   - [Deploying to Azure Local (Edge)](#deploying-to-azure-local-edge)
+  - [Demo & Presentation Guides](#demo--presentation-guides)
   - [Contributing](#contributing)
   - [Resources](#resources)
 
@@ -283,6 +284,14 @@ cp .env.template .env   # populate with your values
 
 # Or use Flux GitOps — see the full guide for setup
 ```
+
+## Demo & Presentation Guides
+
+| Document | Purpose |
+|----------|---------|
+| [8-Minute Demo Script](docs/Demo/8-minute-demo-script.md) | Narrated live demo for technical decision-makers |
+| [Demo Guide](docs/demo-guide.md) | Consolidated presenter reference — talking points, Q&A, cluster commands |
+| [Foundry Local Architecture](docs/foundry-local-architecture.md) | Opt-in fully-local pipeline topology (`USE_LOCAL_PIPELINE=true`) |
 
 ## License
 
