@@ -58,9 +58,9 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                     </Label>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Toggle between light and dark theme</p>
                 </div>
-                <div className="ml-4 flex flex-col items-end">
+                <div className="ml-4 flex items-center gap-3 shrink-0">
+                    <span className="min-w-[5rem] text-right text-xs text-muted-foreground">{isDarkMode ? "Dark Mode" : "Light Mode"}</span>
                     <Switch id="dark-mode" checked={isDarkMode} onCheckedChange={handleDarkModeChange} aria-label="Toggle dark mode" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{isDarkMode ? "Dark Mode" : "Light Mode"}</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">
@@ -70,12 +70,12 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                     </Label>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Choose your drive-thru assistant's voice</p>
                 </div>
-                <div className="ml-4 flex flex-col items-end">
+                <div className="ml-4 flex flex-col items-end gap-1 shrink-0">
                     <select
                         id="voice-choice"
                         value={voiceChoice}
                         onChange={(e) => onVoiceChoiceChange(e.target.value)}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        className="w-56 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
                     >
                         <option value="alloy">Alloy — Neutral &amp; Versatile</option>
                         <option value="ash">Ash — Warm &amp; Friendly</option>
@@ -88,7 +88,7 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                         <option value="marin">Marin — Fresh &amp; Modern</option>
                         <option value="cedar">Cedar — Deep &amp; Grounded</option>
                     </select>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Default: Coral</span>
+                    <span className="text-xs text-muted-foreground">Default: Coral</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">
@@ -100,7 +100,7 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                         Toggle between Azure OpenAI real-time API and Azure Speech SDK (STT, LLM(GPT-4o), TTS)
                     </p>
                 </div>
-                <div className="ml-4 flex flex-col items-end">
+                <div className="ml-4 flex items-center gap-3 shrink-0">
                     <Tooltip content="Work in progress">
                         <div>
                             <Switch
@@ -112,7 +112,7 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                             />
                         </div>
                     </Tooltip>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{useAzureSpeechOn ? "STT->LLM->TTS" : "Realtime API"}</span>
+                    <span className="min-w-[5rem] text-right text-xs text-muted-foreground">{useAzureSpeechOn ? "STT->LLM->TTS" : "Realtime API"}</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">
@@ -122,9 +122,9 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                     </Label>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Toggle between real data and dummy data</p>
                 </div>
-                <div className="ml-4 flex flex-col items-end">
+                <div className="ml-4 flex items-center gap-3 shrink-0">
+                    <span className="min-w-[5rem] text-right text-xs text-muted-foreground">{useDummyData ? "Dummy Data" : "Real Data"}</span>
                     <Switch id="dummy-data" checked={useDummyData} onCheckedChange={handleDummyDataChange} aria-label="Toggle dummy data" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{useDummyData ? "Dummy Data" : "Real Data"}</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">
@@ -134,14 +134,14 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                     </Label>
                     <p className="text-sm text-gray-600 dark:text-gray-400">Toggle visibility of session token and round-trip IDs</p>
                 </div>
-                <div className="ml-4 flex flex-col items-end">
+                <div className="ml-4 flex items-center gap-3 shrink-0">
+                    <span className="min-w-[5rem] text-right text-xs text-muted-foreground">{showSessionTokens ? "Visible" : "Hidden"}</span>
                     <Switch
                         id="session-token-visibility"
                         checked={showSessionTokens}
                         onCheckedChange={handleSessionTokensChange}
                         aria-label="Toggle session token visibility"
                     />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{showSessionTokens ? "Visible" : "Hidden"}</span>
                 </div>
             </div>
         </div>
