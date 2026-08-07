@@ -1,0 +1,27 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: trust-manager
+  namespace: flux-system
+spec:
+  interval: 1h
+  targetNamespace: cert-manager
+  dependsOn:
+    - name: cert-manager
+  chart:
+    spec:
+      chart: trust-manager
+      version: v0.20.3
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    secretTargets:
+      enabled: true
+      authorizedSecretsAll: true

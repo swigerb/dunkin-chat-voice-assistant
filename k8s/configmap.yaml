@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dunkin-config
+  namespace: dunkin-voice
+data:
+  RUNNING_IN_PRODUCTION: "true"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  CHROMA_DATA_PATH: "/app/chroma_data"
+  CHROMA_COLLECTION_NAME: "menu_items"
+  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "coral"
+  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"

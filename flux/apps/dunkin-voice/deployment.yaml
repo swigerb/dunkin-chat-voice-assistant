@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dunkin-voice-assistant
+  namespace: dunkin-voice
+  labels:
+    app: dunkin-voice-assistant
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: dunkin-voice-assistant
+  template:
+    metadata:
+      labels:
+        app: dunkin-voice-assistant
+    spec:
+      automountServiceAccountToken: false
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      imagePullSecrets:
+        - name: acr-secret
+      containers:
+        - name: dunkin-voice
+          # OPERATOR: replace <your-acr> with your Azure Container Registry name
+          # Example: cadunkinacr.azurecr.io/dunkin-voice-assistant:latest
+          image: <your-acr>.azurecr.io/dunkin-voice-assistant:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+          envFrom:
+            - configMapRef:
+                name: dunkin-config
+            - secretRef:
+                name: dunkin-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

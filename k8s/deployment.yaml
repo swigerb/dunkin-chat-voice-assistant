@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dunkin-voice-assistant
+  namespace: dunkin-voice
+  labels:
+    app: dunkin-voice-assistant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dunkin-voice-assistant
+  template:
+    metadata:
+      labels:
+        app: dunkin-voice-assistant
+    spec:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: dunkin-voice
+          image: ${AZURE_ACR_NAME}.azurecr.io/${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: dunkin-config
+            - secretRef:
+                name: dunkin-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+        - name: tls-proxy
+          image: nginx:alpine
+          ports:
+            - containerPort: 443
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "64Mi"
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: dunkin-tls
+        - name: nginx-conf
+          configMap:
+            name: nginx-tls-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dunkin-voice-service
+  namespace: dunkin-voice
+spec:
+  type: NodePort
+  selector:
+    app: dunkin-voice-assistant
+  ports:
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 443
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000

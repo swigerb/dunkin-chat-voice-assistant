@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - dunkin-voice/deployment.yaml
+  - dunkin-voice/service.yaml
+  - dunkin-voice/configmap.yaml
+  - dunkin-voice/ingress.yaml
+  - dunkin-voice/networkpolicy.yaml
+  # - dunkin-voice/secret-provider-class.yaml  # Re-enable when Secrets Store CSI Driver is installed
+  # Model-serving components (enable per your edge topology):
+  # - foundry-models/phi4-mini-deployment.yaml  # Requires GPU node + foundry-local-operator
+  # - whisper-stt/deployment.yaml               # Local speech-to-text (Sprint 4)
+  # - whisper-stt/service.yaml
+  # - piper-tts/deployment.yaml                 # Local text-to-speech (Sprint 4)
+  # - piper-tts/service.yaml

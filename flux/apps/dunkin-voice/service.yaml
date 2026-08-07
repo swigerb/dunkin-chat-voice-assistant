@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dunkin-voice-service
+  namespace: dunkin-voice
+spec:
+  type: ClusterIP
+  selector:
+    app: dunkin-voice-assistant
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
