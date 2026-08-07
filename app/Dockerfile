@@ -33,4 +33,8 @@ RUN python -m pip install -r requirements.txt
 # Copy the freshly-built frontend assets last so they are not overwritten by the backend source copy.
 COPY --from=build-stage /backend/static /app/static
 
-CMD ["python3", "-m", "gunicorn", "app:create_app", "-b", "0.0.0.0:8000", "--worker-class", "aiohttp.GunicornWebWorker"]
+# Production gunicorn config:
+# - 120s timeout for long-lived WebSocket upgrades
+# - 65s keep-alive to outlast Azure LB idle timeout (60s)
+# - Graceful 30s shutdown window
+CMD ["python3", "-m", "gunicorn", "app:create_app", "-b", "0.0.0.0:8000", "--worker-class", "aiohttp.GunicornWebWorker", "--timeout", "120", "--keep-alive", "65", "--graceful-timeout", "30"]
