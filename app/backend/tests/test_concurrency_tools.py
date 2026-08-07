@@ -9,6 +9,7 @@ Sprint 1 — validates that:
 import asyncio
 import json
 import sys
+import textwrap
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -285,6 +286,53 @@ class TestDefensiveToolLookups(unittest.TestCase):
             self.assertEqual(call_args["item"]["call_id"], "call_good")
 
         asyncio.run(run())
+
+
+class ProductionAllocationTests(unittest.TestCase):
+    """The isolation tests above hand `_process_message_to_client` their own
+    dicts, which proves the function respects what it is given but not that the
+    production connection handler allocates one dict per connection. If
+    `_forward_messages` reverted to instance-level state those tests would still
+    pass, so assert the allocation itself.
+    """
+
+    def test_forward_messages_allocates_per_connection_pending(self):
+        import ast
+        import inspect
+
+        source = inspect.getsource(RTMiddleTier._forward_messages)
+        tree = ast.parse(textwrap.dedent(source))
+
+        # Look for a local `tools_pending = {}` (or annotated equivalent) inside
+        # the connection handler.
+        allocates_local = False
+        for node in ast.walk(tree):
+            target = None
+            value = None
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                target, value = node.target.id, node.value
+            elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                target, value = node.targets[0].id, node.value
+            if target == "tools_pending" and isinstance(value, ast.Dict) and not value.keys:
+                allocates_local = True
+                break
+
+        self.assertTrue(
+            allocates_local,
+            "_forward_messages must allocate a fresh per-connection tools_pending dict; "
+            "reusing shared or instance state lets concurrent guests corrupt each other's tool calls",
+        )
+
+    def test_no_instance_level_tools_pending(self):
+        """The original bug was `self._tools_pending` on the shared middleware."""
+        import inspect
+
+        source = inspect.getsource(RTMiddleTier)
+        self.assertNotIn(
+            "self._tools_pending",
+            source,
+            "RTMiddleTier must not hold tool-call state on the instance; it is shared by every connection",
+        )
 
 
 if __name__ == "__main__":
