@@ -67,3 +67,59 @@
 - `npm run build`: ✓ built in 2s
 - `npm test`: 13 passed (5 files)
 - Mutation checks: 4 mutations across happy-hour and quantity-limit code — all detected by tests
+
+## 2026-08-07 — Sprint 3: CRM Dashboard Port
+
+**Branch:** `sprint/crm-dashboard` (from `dev`)
+
+### Files Ported from pr-2
+- `app/backend/crm/__init__.py`, `models.py`, `repository.py`
+- `app/backend/drive_thru/__init__.py`, `models.py`, `store.py`, `simulator.py`, `demo.py`
+- `app/backend/dashboard.py`
+- `app/backend/data/crm_seed.json`
+- `app/backend/tests/test_crm.py` (expanded with 17 tests)
+- `app/employee-dashboard/` (full React app — 7 source files)
+- `scripts/seed_crm.py`
+
+### Deliberately Excluded
+- `app/backend/chroma_data/chroma.sqlite3` — gitignored, Sprint 4 scope
+- All `.js` / `.d.ts` build artifacts under `src/` — gitignored
+- `tailwind.config.js`, `tsconfig.node.json` — replaced by Tailwind 4 CSS-first config
+
+### Rework Applied
+1. **Deadlock fix (e3db8a8)** already in the code; also fixed `_spawn_placeholder_cars` which had the same re-entrant lock bug in `reset()`.
+2. **Tailwind 3→4**: `@tailwindcss/postcss`, `@theme` block in CSS, removed `autoprefixer`, `tailwind.config.js` deleted, `flex-grow`→`grow`.
+3. **Stack upgrade**: React 19.2, Vite 6.4, TS 5.8, Tailwind 4.3, lucide-react 1.28.
+4. **Routes wired additively** in `app.py` after `rtmt.attach_to_app` — no existing code disturbed.
+5. **Idempotent seeding**: table-exists guard + INSERT OR REPLACE. Mutation-checked.
+
+### Dashboard Dependency Upgrade Table
+| Package | pr-2 (old) | Ported (new) |
+|---------|-----------|-------------|
+| react | 18.3 | 19.2 |
+| react-dom | 18.3 | 19.2 |
+| vite | 5.4 | 6.4 |
+| tailwindcss | 3.4 | 4.3 |
+| typescript | 5.5 | 5.8 |
+| lucide-react | 0.445 | 1.28 |
+| @vitejs/plugin-react | 4.3 | 5.2 |
+| autoprefixer | 10.4 | removed |
+| @tailwindcss/postcss | — | 4.3 (new) |
+
+### Test Results
+- **Before**: 110 passed
+- **After**: 127 passed (+17 new: CRM repo lookup, favorites, suggestions, idempotent seeding, dashboard spawn/complete/reset/demo routes)
+- `ruff check .` → All checks passed
+- Main frontend: `npm run build` ✓, `npm test` → 13 passed
+- Employee dashboard: `npm run build` ✓
+- Lockfiles: 0 internal Microsoft host references
+
+### Mutation Check (Seeding Idempotency)
+- **Mutant**: Disabled table-exists guard + changed INSERT OR REPLACE → INSERT
+- **Result**: `sqlite3.IntegrityError: UNIQUE constraint failed: customers.id` → test FAILED as expected
+- **Restored**: test PASSED
+
+### Not Verifiable Until Deployed
+- WebSocket `/dashboard` real-time event flow (requires running server)
+- CRM Bluetooth MAC lookup with real hardware
+- Demo fleet auto-spawning under load
