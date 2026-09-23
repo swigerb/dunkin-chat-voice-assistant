@@ -924,6 +924,11 @@ class RTMiddleTier:
                                         "tool_name": item["name"],
                                         "tool_result": result.to_text()
                                     })
+                                    if item["name"] == "update_order":
+                                        try:
+                                            self._sessions.publish_order(session_id, json.loads(result.to_text()))
+                                        except ValueError:
+                                            pass
                                 updated_message = None
 
                 case "response.done":

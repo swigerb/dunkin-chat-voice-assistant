@@ -79,7 +79,7 @@ class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
             mock_instance = MagicMock()
             mock_cls.return_value = mock_instance
             from app import create_app
-            await create_app()
+            self.app = await create_app()
             return mock_cls, mock_instance
 
     async def test_reasoning_and_transcription_come_from_config_yaml(self):
@@ -97,6 +97,23 @@ class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(mock_instance.reasoning_effort, "medium")
         self.assertIs(mock_instance.reasoning_model, False)
         self.assertEqual(mock_instance.transcription_model, "my-transcribe")
+
+    async def test_cloud_sessions_publish_to_the_crew_dashboard(self):
+        _, mock_instance = await self._run_create_app()
+        self.assertIs(mock_instance.sessions.dashboard, self.app["drive_thru_simulator"])
+
+    async def test_the_local_pipeline_is_not_wired_to_the_dashboard(self):
+        local_cls = MagicMock()
+        local_cls.return_value = MagicMock(spec=["temperature", "system_message", "attach_to_app"])
+        edge_modules = {"chromadb": MagicMock(), "chromadb.utils": MagicMock(),
+                        "chromadb.utils.embedding_functions": MagicMock(),
+                        "rtmt_local": MagicMock(RTLocalPipeline=local_cls)}
+        with patch.dict(sys.modules, edge_modules), patch("app.attach_tools_rtmt"), \
+                patch.dict(os.environ, {"USE_LOCAL_PIPELINE": "true", "RUNNING_IN_PRODUCTION": "1"}):
+            from app import create_app
+            app = await create_app()
+        local_cls.assert_called_once()
+        self.assertIn("drive_thru_simulator", app)
 
     async def test_default_voice_is_marin(self):
         mock_cls, _ = await self._run_create_app()

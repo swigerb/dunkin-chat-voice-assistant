@@ -31,6 +31,7 @@ import time
 from collections import OrderedDict, deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from aiohttp import web
 
@@ -122,6 +123,12 @@ class SessionManager:
         self._resume_index: dict[str, str] = {}     # digest -> session_id
         # session_id -> the last few (role, text) turns, for rehydrating a resume.
         self._transcripts: dict[str, deque[tuple[str, str]]] = {}
+        # Crew dashboard (DriveThruSimulator) the conversations are published to,
+        # or None. A session is published once, when its conversation starts; a
+        # resume keeps publishing under the same session id; ending clears it.
+        self.dashboard: Any = None
+        self._published: set[str] = set()
+        self._dashboard_tasks: set[asyncio.Task] = set()
         self._idle_check_task: asyncio.Task | None = None
         self._clock: Callable[[], float] = clock or time.monotonic
 
@@ -176,6 +183,39 @@ class SessionManager:
     def mark_greeting_sent(self, session_id: str | None) -> None:
         if session_id is not None:
             self._sent_greeting.add(session_id)
+            self.publish_start(session_id)
+
+    # ── Crew dashboard ──
+
+    def _notify_dashboard(self, method: str, *args: Any) -> None:
+        if self.dashboard is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning("Dashboard %s skipped: no running event loop", method)
+            return
+        # Tasks are created in call order and the simulator serialises on its
+        # lock, so assign -> order updates -> release reach it in order.
+        task = loop.create_task(getattr(self.dashboard, method)(*args))
+        self._dashboard_tasks.add(task)
+        task.add_done_callback(self._dashboard_task_done)
+
+    def _dashboard_task_done(self, task: asyncio.Task) -> None:
+        self._dashboard_tasks.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("Dashboard update failed: %s", task.exception())
+
+    def publish_start(self, session_id: str) -> None:
+        """The conversation started: put the session on the dashboard (once)."""
+        if self.dashboard is None or session_id in self._published:
+            return
+        self._published.add(session_id)
+        self._notify_dashboard("assign_session", session_id)
+
+    def publish_order(self, session_id: str | None, order_summary: dict) -> None:
+        if session_id in self._published:
+            self._notify_dashboard("record_order_update", session_id, order_summary)
 
     def end_session(self, session_id: str | None, reason: str = "ended") -> None:
         """Permanently end a session: delete the order and all per-session state."""
@@ -192,6 +232,9 @@ class SessionManager:
         self._sent_greeting.discard(session_id)
         self._last_activity.pop(session_id, None)
         self._transcripts.pop(session_id, None)
+        if session_id in self._published:
+            self._published.discard(session_id)
+            self._notify_dashboard("release_session", session_id)
         logger.info("Session %s ended (%s)", session_id, reason)
 
     def detached_expires_at(self, session_id: str) -> float | None:
