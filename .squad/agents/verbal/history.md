@@ -65,3 +65,11 @@ Used `<your-xxx>` angle-bracket placeholders in YAML and `PLACEHOLDER` for the S
 - `docs/azure-local-deployment.md`: new "Azure OpenAI: bring your own account" section (deploy gpt-realtime-2.1 version 2026-07-07 in your own account; set endpoint + deployment name).
 - Guard test `test_edge_config_generic.py` covers flux/, k8s/, the edge scripts and edge docs: no `acx-dunkin-edge`, no hardcoded `*.openai.azure.com` / `*.cognitiveservices.azure.com` hosts, no contributor values, no GUIDs.
 - Edge gating (`USE_LOCAL_PIPELINE`, requirements-edge, Dockerfile.edge) untouched.
+
+## Order resume port (2026-09-24)
+- **Step 0 infra:**
+  - `gunicorn --workers 1` in `app/Dockerfile` and `app/Dockerfile.edge`; edge manifests stay at replicas 1. Detached sessions live in process memory.
+  - Sticky session affinity on the Container App ingress.
+  - An out-of-band `aad-client-secret` is preserved across `azd provision` (`preserveExistingSecretNames`). `APP_SESSION_SECRET` was not ported: Dunkin has no token endpoint.
+- **`.env.template` added** (generic placeholders only; guarded by a test).
+- **Only a deploy can confirm:** the sticky affinity routing a reconnect back to the same replica, and the secret surviving a real re-provision.
