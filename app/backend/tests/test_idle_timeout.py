@@ -91,8 +91,9 @@ class SessionManagerIdleTests(unittest.IsolatedAsyncioTestCase):
         sid = self.sm.create_session(ws)
         self.clock.advance(301)
         await self.sm.close_idle_sessions()
-        self.sm.cleanup_session(ws, sid)       # the forwarder's finally
+        self.sm.detach_session(ws, sid)        # the forwarder's finally
         self.assertNotIn(sid, order_state_singleton.sessions)
+        self.assertEqual(self.sm.detached_session_count, 0, "an idle close is never held for resume")
 
     async def test_idle_checker_task_runs_and_stops(self):
         self.sm.idle_check_interval_seconds = 0.01
@@ -155,8 +156,10 @@ class MiddleTierIdleTests(unittest.IsolatedAsyncioTestCase):
             ws = await h.client.ws_connect("/realtime")
             await ws.receive(timeout=5)
             await h.settle()
-            self.assertEqual(set(order_state_singleton.sessions) - before, set())
             self.assertEqual(h.sessions.active_session_count, 0)
+            h.clock.advance(h.sessions.grace_seconds)
+            h.sessions.sweep_detached()
+            self.assertEqual(set(order_state_singleton.sessions) - before, set())
 
     async def test_mic_audio_frames_are_not_guest_activity(self):
         async with MiddleTierHarness() as h:

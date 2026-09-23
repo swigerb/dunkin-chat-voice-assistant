@@ -63,8 +63,19 @@ security:
   # Close code 4000 "idle_timeout": the browser does not auto-reconnect, shows a
   # notice, and the next tap starts a fresh session. The order is deleted.
   idle_timeout_seconds: 300
-  # How often the idle check runs.
+  # How often the idle check runs (it also expires grace-held sessions).
   idle_check_interval_seconds: 15
+
+# Order resume: after a transport drop the order is held so the browser can
+# reconnect and carry on (see docs/order_resume.md). An idle close (4000) or
+# the guest ending the session is never resumable.
+resume:
+  enabled: true
+  # How long a dropped session's order is held. Also capped by the idle
+  # budget above: it expires at min(drop + grace, last guest activity + idle).
+  grace_seconds: 120
+  # Most sessions held at once; the oldest is ended first.
+  max_detached: 20
 
 resilience:
   # When a model response is rate-limited (shared Azure OpenAI quota), retry it

@@ -1068,7 +1068,7 @@ class RTMiddleTier:
                 finally:
                     if recovery is not None:
                         recovery.cancel("connection closed")
-                    self._sessions.cleanup_session(ws, session_id, reason=f"client close code={ws.close_code}")
+                    self._sessions.detach_session(ws, session_id, reason=f"client close code={ws.close_code}")
 
     async def _websocket_handler(self, request: web.Request):
         ws = web.WebSocketResponse(compress=_WS_COMPRESS)
@@ -1082,8 +1082,8 @@ class RTMiddleTier:
         finally:
             # Covers an upstream connect failure, which never reaches the
             # forwarder's own cleanup. A no-op if that already ran.
-            self._sessions.cleanup_session(ws, self._sessions.get_session_id(ws),
-                                           reason=f"handler exit code={ws.close_code}")
+            self._sessions.detach_session(ws, self._sessions.get_session_id(ws),
+                                          reason=f"handler exit code={ws.close_code}")
         return ws
 
     async def _start_background_tasks(self, _app: web.Application) -> None:
