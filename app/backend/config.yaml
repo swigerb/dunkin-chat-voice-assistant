@@ -76,6 +76,9 @@ resume:
   grace_seconds: 120
   # Most sessions held at once; the oldest is ended first.
   max_detached: 20
+  # A resume is honoured only as the socket's first frame; if nothing arrives
+  # within this many seconds the socket is announced as a fresh session.
+  first_frame_timeout_seconds: 2
 
 resilience:
   # When a model response is rate-limited (shared Azure OpenAI quota), retry it

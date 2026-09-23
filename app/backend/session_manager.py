@@ -22,10 +22,14 @@ does not use this module.
 """
 
 import asyncio
+import hashlib
+import hmac
 import logging
+import secrets
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from aiohttp import web
 
@@ -45,6 +49,44 @@ _resume_cfg = get_config().get("resume", {}) or {}
 IDLE_CLOSE_CODE = 4000
 IDLE_CLOSE_REASON = "idle_timeout"
 
+# A socket whose session was resumed on a newer socket (e.g. a half-open socket
+# after a network switch). The browser must not reconnect.
+SUPERSEDED_CLOSE_CODE = 4002
+SUPERSEDED_CLOSE_REASON = "superseded"
+
+# The guest explicitly ended the session (extension.end_session, "New order").
+SESSION_ENDED_CLOSE_CODE = 1000
+SESSION_ENDED_CLOSE_REASON = "session_ended"
+
+# Resume ids are secrets.token_urlsafe(32): 43 chars. Anything far outside that is malformed.
+_RESUME_ID_MIN_LEN = 32
+_RESUME_ID_MAX_LEN = 128
+
+
+def _resume_digest(resume_id: str) -> str:
+    return hashlib.sha256(resume_id.encode("utf-8", "replace")).hexdigest()
+
+
+def resume_id_fingerprint(resume_id: object) -> str:
+    """The only form of a resume id that may be logged: sha256(id)[:8]."""
+    if not isinstance(resume_id, str) or not resume_id:
+        return "none"
+    return _resume_digest(resume_id)[:8]
+
+
+@dataclass
+class ResumeOutcome:
+    accepted: bool
+    session_id: str | None = None
+    # disabled | malformed | unknown | expired (rejections only).
+    reason: str | None = None
+    # The rotated resume id for the browser to store (accepted only).
+    resume_id: str | None = None
+    # A socket still attached to the resumed session, to be closed with 4002.
+    stale_ws: web.WebSocketResponse | None = None
+    # True if the guest had already been greeted (conversation in progress).
+    conversation_started: bool = False
+
 
 class SessionManager:
     """Maps browser sockets to order sessions and enforces the idle timeout."""
@@ -58,6 +100,9 @@ class SessionManager:
         self._detached: OrderedDict[str, float] = OrderedDict()
         self._sent_greeting: set[str] = set()
         self._last_activity: dict[str, float] = {}
+        # Resume credentials are stored only as sha256 digests.
+        self._resume_digests: dict[str, str] = {}   # session_id -> digest
+        self._resume_index: dict[str, str] = {}     # digest -> session_id
         self._idle_check_task: asyncio.Task | None = None
         self._clock: Callable[[], float] = clock or time.monotonic
 
@@ -67,6 +112,7 @@ class SessionManager:
         self.resume_enabled = bool(_resume_cfg.get("enabled", True))
         self.grace_seconds = float(_resume_cfg.get("grace_seconds", 120))
         self.max_detached = int(_resume_cfg.get("max_detached", 20))
+        self.first_frame_timeout_seconds = float(_resume_cfg.get("first_frame_timeout_seconds", 2.0))
 
     @property
     def active_session_count(self) -> int:
@@ -117,6 +163,9 @@ class SessionManager:
         if ws is not None and self._session_map.get(ws) == session_id:
             del self._session_map[ws]
         self._detached.pop(session_id, None)
+        digest = self._resume_digests.pop(session_id, None)
+        if digest is not None:
+            self._resume_index.pop(digest, None)
         order_state_singleton.delete_session(session_id)
         self._sent_greeting.discard(session_id)
         self._last_activity.pop(session_id, None)
@@ -143,6 +192,11 @@ class SessionManager:
         if not self.resume_enabled or self.grace_seconds <= 0:
             self.end_session(session_id, f"{reason}; resume disabled")
             return
+        if session_id not in self._resume_digests:
+            # The browser was never given a resume id (e.g. the upstream connect
+            # failed), so nothing can ever resume this session.
+            self.end_session(session_id, f"{reason}; never announced")
+            return
         now = self._clock()
         self._detached[session_id] = now
         self._detached.move_to_end(session_id)
@@ -154,6 +208,72 @@ class SessionManager:
         while len(self._detached) > max(self.max_detached, 0):
             oldest = next(iter(self._detached))
             self.end_session(oldest, "evicted: resume.max_detached reached")
+
+    def issue_resume_id(self, session_id: str | None) -> str | None:
+        """Mint a fresh 256-bit resume id for the session, invalidating any previous
+        one. Only its digest is kept; the raw value goes to the browser over the
+        socket and nowhere else (never in URLs or logs)."""
+        if not self.resume_enabled or session_id is None or session_id not in order_state_singleton.sessions:
+            return None
+        old = self._resume_digests.pop(session_id, None)
+        if old is not None:
+            self._resume_index.pop(old, None)
+        resume_id = secrets.token_urlsafe(32)
+        digest = _resume_digest(resume_id)
+        self._resume_digests[session_id] = digest
+        self._resume_index[digest] = session_id
+        return resume_id
+
+    def resume(self, ws: web.WebSocketResponse, resume_id: object) -> ResumeOutcome:
+        """Re-attach the session identified by ``resume_id`` to ``ws``.
+
+        Single use: the presented id is consumed and a rotated one is returned.
+        The provisional session created for ``ws`` on connect is ended. If the
+        resumed session is still attached to another socket (half-open), that
+        socket is handed back as ``stale_ws`` to be closed with 4002.
+        """
+        if not self.resume_enabled:
+            return ResumeOutcome(False, reason="disabled")
+        if not isinstance(resume_id, str) or not (_RESUME_ID_MIN_LEN <= len(resume_id) <= _RESUME_ID_MAX_LEN):
+            return ResumeOutcome(False, reason="malformed")
+        digest = _resume_digest(resume_id)
+        session_id = self._resume_index.get(digest)
+        stored = self._resume_digests.get(session_id) if session_id is not None else None
+        if (session_id is None or stored is None or not hmac.compare_digest(stored, digest)
+                or session_id not in order_state_singleton.sessions):
+            return ResumeOutcome(False, reason="unknown")
+        current = self._session_map.get(ws)
+        if current == session_id:
+            return ResumeOutcome(False, reason="unknown")
+
+        now = self._clock()
+        last = self._last_activity.get(session_id, now)
+        expires = self.detached_expires_at(session_id)
+        if now - last > self.idle_timeout_seconds or (expires is not None and now >= expires):
+            self.end_session(session_id, "resume attempted after expiry")
+            return ResumeOutcome(False, reason="expired")
+
+        # Consume the presented id before anything else can use it.
+        self._resume_index.pop(digest, None)
+        self._resume_digests.pop(session_id, None)
+
+        stale_ws = self._attached.get(session_id)
+        if stale_ws is ws:
+            stale_ws = None
+        if stale_ws is not None:
+            self._session_map.pop(stale_ws, None)
+            del self._attached[session_id]
+        if current is not None:
+            self.end_session(current, "replaced by resume")
+        self._detached.pop(session_id, None)
+        self._session_map[ws] = session_id
+        self._attached[session_id] = ws
+        new_id = self.issue_resume_id(session_id)
+        logger.info("Session %s resumed (resume id %s -> %s)%s", session_id,
+                    resume_id_fingerprint(resume_id), resume_id_fingerprint(new_id),
+                    "; superseding a still-attached socket" if stale_ws is not None else "")
+        return ResumeOutcome(True, session_id=session_id, resume_id=new_id, stale_ws=stale_ws,
+                             conversation_started=session_id in self._sent_greeting)
 
     def sweep_detached(self) -> int:
         """End detached sessions whose grace hold or idle budget has run out."""
