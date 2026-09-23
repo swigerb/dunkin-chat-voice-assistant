@@ -36,3 +36,13 @@
 - **azure-search-documents 12.0:** Migrated setup_intvect.py — AzureOpenAIParameters→AzureOpenAIVectorizerParameters, resource_uri→resource_url, deployment_id→deployment_name
 - **ruff check:** 1 isort fix (setup_intvect.py alphabetical ordering after rename), now clean
 - **Tests:** 59 pass (fixed pre-existing test_app.py static dir issue — tests now create the dir in setUp)
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- `config.yaml` gains:
+  - `model.{reasoning_effort, reasoning_model, parallel_tool_calls, transcription_model, default_voice: marin}`;
+  - `connection.ws_compression: false`.
+- Item 6: aiohttp 3.14.3 kills a permessage-deflate socket with 1002 "non-zero reserved bits" when a PONG precedes a compressed frame (reproduced in Dunkin).
+  - Browser socket: `WebSocketResponse(compress=_WS_COMPRESS)`.
+  - Upstream: `ws_connect(compress=0)`.
+  - Same for the edge `/realtime` in `rtmt_local.py`.
+- Cloud path verified with chromadb/onnxruntime **absent** from the venv: full suite green.

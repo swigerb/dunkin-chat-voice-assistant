@@ -9,7 +9,8 @@
     },
     "status": {
         "notRecordingMessage": "Posez des questions sur les avantages sociaux des employés de Contoso",
-        "conversationInProgress": "Conversation en cours"
+        "conversationInProgress": "Conversation en cours",
+        "connectionLost": "Connexion perdue. Touchez le micro pour commencer une nouvelle commande."
     },
     "history": {
         "transcriptHistory": "Historique de la transcription",

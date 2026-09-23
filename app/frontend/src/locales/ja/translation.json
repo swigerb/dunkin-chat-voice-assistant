@@ -9,7 +9,8 @@
     },
     "status": {
         "notRecordingMessage": "Contoso 従業員の福利厚生について質問してください",
-        "conversationInProgress": "会話が進行中"
+        "conversationInProgress": "会話が進行中",
+        "connectionLost": "接続が切れました。マイクをタップして新しい注文を始めてください。"
     },
     "history": {
         "transcriptHistory": "トランスクリプト履歴",

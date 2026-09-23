@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import useWebSocket from "react-use-websocket";
+import { useCallback, useState } from "react";
+import useWebSocket, { ReadyState } from "react-use-websocket";
 
 import {
     InputAudioBufferAppendCommand,
@@ -24,6 +24,8 @@ type Parameters = {
     enableInputAudioTranscription?: boolean;
     onWebSocketOpen?: () => void;
     onWebSocketClose?: () => void;
+    /** Fired whenever the socket closes. The server session (and its order) is gone. */
+    onConnectionLost?: (info: ConnectionLostInfo) => void;
     onWebSocketError?: (event: Event) => void;
     onWebSocketMessage?: (event: MessageEvent<any>) => void;
 
@@ -38,6 +40,8 @@ type Parameters = {
     onReceivedError?: (message: Message) => void;
 };
 
+export type ConnectionLostInfo = { code: number; reason: string };
+
 export default function useRealTime({
     useDirectAoaiApi,
     aoaiEndpointOverride,
@@ -46,6 +50,7 @@ export default function useRealTime({
     enableInputAudioTranscription,
     onWebSocketOpen,
     onWebSocketClose,
+    onConnectionLost,
     onWebSocketError,
     onWebSocketMessage,
     onReceivedResponseDone,
@@ -62,13 +67,30 @@ export default function useRealTime({
         ? `${aoaiEndpointOverride}/openai/v1/realtime?api-key=${aoaiApiKeyOverride}&model=${aoaiModelOverride}`
         : `/realtime`;
 
-    const { sendJsonMessage } = useWebSocket(wsEndpoint, {
-        onOpen: () => onWebSocketOpen?.(),
-        onClose: () => onWebSocketClose?.(),
-        onError: event => onWebSocketError?.(event),
-        onMessage: event => onMessageReceived(event),
-        shouldReconnect: () => true
-    });
+    // False once background retries are exhausted; the next mic tap re-opens it.
+    const [shouldConnect, setShouldConnect] = useState(true);
+
+    const { sendJsonMessage, readyState } = useWebSocket(
+        wsEndpoint,
+        {
+            onOpen: () => onWebSocketOpen?.(),
+            onClose: event => {
+                onConnectionLost?.({ code: event.code, reason: event.reason ?? "" });
+                onWebSocketClose?.();
+            },
+            onError: event => onWebSocketError?.(event),
+            onMessage: event => onMessageReceived(event),
+            shouldReconnect: () => true,
+            onReconnectStop: () => setShouldConnect(false)
+        },
+        shouldConnect
+    );
+
+    const isConnected = readyState === ReadyState.OPEN;
+
+    const reconnect = useCallback(() => {
+        if (!shouldConnect) setShouldConnect(true);
+    }, [shouldConnect]);
 
     const startSession = () => {
         const command: SessionUpdateCommand = {
@@ -98,7 +120,10 @@ export default function useRealTime({
             audio: base64Audio
         };
 
-        sendJsonMessage(command);
+        // keep=false: drop, never queue, mic audio while the socket is down.
+        // Queued frames would be replayed onto the next socket (a new server
+        // session) ahead of the guest's session.update.
+        sendJsonMessage(command, false);
     };
 
     const inputAudioBufferClear = () => {
@@ -106,7 +131,7 @@ export default function useRealTime({
             type: "input_audio_buffer.clear"
         };
 
-        sendJsonMessage(command);
+        sendJsonMessage(command, false);
     };
 
     const onMessageReceived = useCallback((event: MessageEvent<any>) => {
@@ -166,5 +191,5 @@ export default function useRealTime({
         sendJsonMessage({ type: "extension.set_voice", voice });
     };
 
-    return { startSession, addUserAudio, inputAudioBufferClear, sendVoiceChoice };
+    return { startSession, addUserAudio, inputAudioBufferClear, sendVoiceChoice, isConnected, reconnect };
 }

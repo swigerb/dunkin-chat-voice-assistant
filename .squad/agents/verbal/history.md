@@ -51,3 +51,11 @@ Used `<your-xxx>` angle-bracket placeholders in YAML and `PLACEHOLDER` for the S
 - ChromaDB integration / local search
 - Backend `USE_LOCAL_PIPELINE=true` code path
 - Uncommenting model-serving resources in `flux/apps/kustomization.yaml` (manifests are present but commented; the backend code to talk to them is not yet ported)
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Item 2: bicep deployment gpt-realtime-2.1 (2026-07-07, GlobalStandard). Optional reasoning/transcription params set container env only when non-empty.
+- Item 3: marin in `main.parameters.json`, `.env-sample`, and the flux + k8s configmaps.
+- Item 7: `webAppExists` read `SERVICE_WEB_RESOURCE_EXISTS`, but the service is `backend`. So every provision would have reset the image to helloworld, although the env had `SERVICE_BACKEND_RESOURCE_EXISTS=true`. Fixed; `test_azd_service_wiring.py` added.
+- azd env `dunkin-demo` (local, gitignored): `AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-2.1`, `..._VOICE_CHOICE=marin`. No provision or deploy run.
+- `az bicep build` clean. `role.bicep` guid is deterministic, so re-provisioning against the shared Sonic OpenAI RG is idempotent.
+- **Edge follow-up:** AOAI account `acx-dunkin-edge-openai` needs its own gpt-realtime-2.1 deployment before the configmap change is rolled out.

@@ -12,6 +12,6 @@ data:
   # Hybrid mode: Azure OpenAI Realtime for voice, local ChromaDB for search
   USE_LOCAL_PIPELINE: "false"
   # Azure OpenAI Realtime
-  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "coral"
-  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-1.5"
+  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "marin"
+  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-2.1"
   AZURE_OPENAI_EASTUS2_ENDPOINT: "wss://acx-dunkin-edge-openai.openai.azure.com/"

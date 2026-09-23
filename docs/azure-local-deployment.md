@@ -25,7 +25,7 @@ Choose Azure Local when you need the assistant running at the edge (e.g., in-sto
 - **cert-manager** — installed via Flux (included in `flux/infrastructure/`)
 - **NGINX Ingress Controller** — for TLS termination and WebSocket proxying
 - **DNS record** pointing your chosen domain at the cluster's ingress IP
-- **Azure OpenAI** resource with a `gpt-realtime-1.5` deployment (or your configured realtime model)
+- **Azure OpenAI** resource with a `gpt-realtime-2.1` deployment (or your configured realtime model)
 - **(Optional) GPU node(s)** — required only for on-prem model serving; see [GPU Requirements](#gpu-requirements)
 
 ## Repository Layout

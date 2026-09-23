@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-import StatusMessage from "@/components/ui/status-message";
+import StatusMessage, { ConnectionNotice } from "@/components/ui/status-message";
 import MenuPanel from "@/components/ui/menu-panel";
 import OrderSummary, { calculateOrderSummary, OrderSummaryProps } from "@/components/ui/order-summary";
 import TranscriptPanel from "@/components/ui/transcript-panel";
@@ -16,6 +16,7 @@ import useRealTime from "@/hooks/useRealtime";
 import useAzureSpeech from "@/hooks/useAzureSpeech";
 import useAudioRecorder from "@/hooks/useAudioRecorder";
 import useAudioPlayer from "@/hooks/useAudioPlayer";
+import { resolveVoice } from "@/lib/voices";
 
 import { ExtensionMiddleTierToolResponse, ExtensionRoundTripToken, ExtensionSessionMetadata } from "./types";
 
@@ -95,7 +96,7 @@ function CoffeeApp() {
         return stored === null ? true : stored === "true";
     });
     const [voiceChoice, setVoiceChoice] = useState<string>(() => {
-        return localStorage.getItem("voiceChoice") || "coral";
+        return resolveVoice(localStorage.getItem("voiceChoice"));
     });
 
     useEffect(() => {
@@ -119,10 +120,28 @@ function CoffeeApp() {
     const greetingAudioSeenRef = useRef(false);
     const startMicInFlightRef = useRef<Promise<void> | null>(null);
 
+    // A closed socket means the server-side session (and its order) is gone and
+    // the background reconnect opens a brand-new one. End the conversation and
+    // never auto-resume the mic: the guest taps to start a fresh order.
+    const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice>(null);
+    const serverSessionLostRef = useRef(false);
+    const orderItemCountRef = useRef(0);
+    useEffect(() => {
+        orderItemCountRef.current = order.items.length;
+    }, [order]);
+
     const realtime = useRealTime({
         enableInputAudioTranscription: true,
         onWebSocketOpen: () => console.log("WebSocket connection opened"),
         onWebSocketClose: () => console.log("WebSocket connection closed"),
+        onConnectionLost: ({ code, reason }) => {
+            console.warn(`WebSocket closed (code=${code}${reason ? `, reason=${reason}` : ""})`);
+            if (useAzureSpeechOn) return;
+            serverSessionLostRef.current = true;
+            const wasActive = isSessionActiveRef.current;
+            if (wasActive) void stopConversation();
+            if (wasActive || orderItemCountRef.current > 0) setConnectionNotice("lost");
+        },
         onWebSocketError: event => console.error("WebSocket error:", event),
         onReceivedError: message => console.error("error", message),
         onReceivedResponseAudioDelta: message => {
@@ -227,9 +246,32 @@ function CoffeeApp() {
         onAudioRecorded: useAzureSpeechOn ? azureSpeech.addUserAudio : realtime.addUserAudio
     });
 
+    const stopConversation = async () => {
+        await stopAudioRecording();
+        stopAudioPlayer();
+        isSessionActiveRef.current = false;
+        awaitingGreetingDoneRef.current = false;
+        if (useAzureSpeechOn) {
+            azureSpeech.inputAudioBufferClear();
+        } else {
+            realtime.inputAudioBufferClear();
+        }
+        setIsRecording(false);
+    };
+
     const onToggleListening = async () => {
         if (!isRecording) {
             setSessionIdentifiers(null);
+            setConnectionNotice(null);
+            if (!useAzureSpeechOn) {
+                if (serverSessionLostRef.current) {
+                    serverSessionLostRef.current = false;
+                    setOrder(initialOrder);
+                }
+                // Exhausted retries leave the socket down; voice + session.update
+                // below are queued and sent once the new socket opens.
+                if (!realtime.isConnected) realtime.reconnect();
+            }
 
             // Start session and playback immediately, but delay mic capture until the greeting finishes.
             isSessionActiveRef.current = true;
@@ -243,8 +285,10 @@ function CoffeeApp() {
                 azureSpeech.startSession();
                 await startAudioRecording();
             } else {
-                realtime.startSession();
+                // Voice first: the middle tier applies it before the greeting,
+                // so the greeting isn't spoken (and the voice locked) in the old one.
                 realtime.sendVoiceChoice(voiceChoice);
+                realtime.startSession();
 
                 // Safety: if we never receive the greeting completion, start the mic after a short timeout.
                 window.setTimeout(() => {
@@ -260,16 +304,7 @@ function CoffeeApp() {
 
             setIsRecording(true);
         } else {
-            await stopAudioRecording();
-            stopAudioPlayer();
-            isSessionActiveRef.current = false;
-            awaitingGreetingDoneRef.current = false;
-            if (useAzureSpeechOn) {
-                azureSpeech.inputAudioBufferClear();
-            } else {
-                realtime.inputAudioBufferClear();
-            }
-            setIsRecording(false);
+            await stopConversation();
         }
     };
 
@@ -371,7 +406,7 @@ function CoffeeApp() {
                                         </>
                                     )}
                                 </Button>
-                                <StatusMessage isRecording={isRecording} />
+                                <StatusMessage isRecording={isRecording} notice={connectionNotice} />
                             </div>
                         </div>
                     </Card>

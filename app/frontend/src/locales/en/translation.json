@@ -9,7 +9,8 @@
     },
     "status": {
         "notRecordingMessage": "Let's order some coffee!",
-        "conversationInProgress": "Conversation in progress"
+        "conversationInProgress": "Conversation in progress",
+        "connectionLost": "Connection lost. Tap the mic to start a new order."
     },
     "history": {
         "transcriptHistory": "Transcript history",
