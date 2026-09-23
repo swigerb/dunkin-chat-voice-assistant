@@ -369,15 +369,24 @@ class ToolResultDirection(Enum):
 class ToolResult:
     text: str
     destination: ToolResultDirection
+    server_text: str | None
 
-    def __init__(self, text: str, destination: ToolResultDirection):
+    def __init__(self, text: str, destination: ToolResultDirection, server_text: str | None = None):
         self.text = text
         self.destination = destination
+        # What the model sees for a TO_CLIENT result (the browser gets `text`).
+        self.server_text = server_text
 
     def to_text(self) -> str:
         if self.text is None:
             return ""
         return self.text if isinstance(self.text, str) else json.dumps(self.text)
+
+    def model_output(self) -> str:
+        """The function_call_output sent back to the model."""
+        if self.destination == ToolResultDirection.TO_SERVER:
+            return self.to_text()
+        return self.server_text or ""
 
 class Tool:
     target: Callable[..., ToolResult]
@@ -680,7 +689,7 @@ class RTMiddleTier:
                                     "item": {
                                         "type": "function_call_output",
                                         "call_id": item["call_id"],
-                                        "output": result.to_text() if result.destination == ToolResultDirection.TO_SERVER else ""
+                                        "output": result.model_output()
                                     }
                                 })
                                 if result.destination == ToolResultDirection.TO_CLIENT:
