@@ -37,3 +37,14 @@
 - **Brand preserved:** All Dunkin brand vars (brand-orange, brand-pink, brand-cream, brand-brown, Fredoka font) confirmed in built CSS
 - **CSS size:** 33,972→47,932 bytes (TW4 generates more utilities by default; acceptable for demo)
 - **Build:** tsc + vite build clean. **Tests:** 13 pass (5 files, unchanged count)
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Item 3:
+  - `lib/voices.ts` is the single source of the 10 voices; marin/cedar marked recommended, `DEFAULT_VOICE=marin`.
+  - `resolveVoice()` drops unknown stored voices; Settings renders from `VOICE_OPTIONS`.
+  - Docs corrected: a voice change applies from the next conversation, not live.
+- Item 1: App.tsx sends the voice before `startSession()`.
+- Item 6:
+  - `useRealtime` exposes `onConnectionLost({code, reason})`, `isConnected`, `reconnect()`; parks on `onReconnectStop`; audio append/clear use `keep=false`.
+  - App ends the conversation on loss, shows `status.connectionLost` (en/es/fr/ja), clears the order on the next tap, and never auto-restarts the mic.
+- Frontend tests 13 → 31. Lockfiles unchanged.

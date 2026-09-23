@@ -174,3 +174,16 @@
 - `flux/apps/dunkin-voice/configmap.yaml` still has `AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"` — this is live infra config, not docs, so I did not modify it per the "documentation only" rule. It should be updated when the deployment model is rotated.
 - The `.env-sample` shows `gpt-realtime-mini` which may need updating to `gpt-realtime-1.5` — again, application config, not docs scope.
 
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Reviewed and sequenced the 7-item Sonic port. One commit per item: 5ea449c, 0513622, 98be241, 5a73acf, 7b82260, 6466071, 14a68ca. Follow-up c4249de (smoke check fixes the live probe found).
+- **Item 1 reconciliation with the Sprint-1 greeting fix (Godfrey / `ba8c94d` lineage):**
+  - Kept per-connection `tools_pending`.
+  - Replaced the `session_configured` bool, which only gated mid-session voice updates. The greeting now waits for the relayed browser update plus `session.updated`, and every upstream socket is bootstrapped first.
+  - `ba8c94d` is **not** an ancestor of `dev`. Its request-id fix read `ws.headers`, which are the response headers; now fixed to read the request headers.
+- **Shared Azure OpenAI (`cog-axgpampkq3yfa`, rg-sonic-demo):**
+  - `AZURE_OPENAI_REUSE_EXISTING=true`, so `module openAi` is skipped. Provision only adds deterministic-guid role assignments there, which are idempotent. No Sonic deployment is redeclared.
+  - gpt-realtime-2.1 cap 10 is shared with Sonic; contention is the remaining risk.
+- Scope notes:
+  - Sonic's idle-4000, token-wait and `response.cancel` parts of item 6 are N/A (Dunkin has none of those features).
+  - `/dashboard` socket untouched (server-push only).
+  - es/fr/ja `status.notRecordingMessage` still has stale Contoso copy (pre-existing, out of scope).

@@ -49,3 +49,21 @@
 - **Frontend baseline:** 13 tests, 5 files — all pass. Unchanged after upgrade (React 19 + Vitest 2 + jsdom 29).
 - **Flaky test search:** No datetime.now/date.today/discount/happy-hour/promo logic found in either backend or frontend tests. No time-dependent pricing in this demo.
 - **No regressions from dependency upgrades.**
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Baseline: backend 139, frontend 13. Final: backend 252 (+113), frontend 31 (+18). Ruff clean, build OK.
+- Mutation (170 distinct, all against new tests):
+
+| Item | Mutants | Result |
+|---|---|---|
+| 1 | 11 | 11 killed |
+| 2 | 27 | 27 killed |
+| 3 | 17 | 17 killed |
+| 4 | 29 | 28 killed, 1 equivalent (code removed) |
+| 5 | 27 | 27 killed |
+| 5 follow-up (synth + tenant) | 24 | 24 killed |
+| 6 | 27 | 27 killed |
+| 7 | 8 | 8 killed |
+
+- Survivors in the first rounds (items 1, 2, 3, 4, 5, 6) were fixed by tightening tests, never by weakening them. Every re-run was killed.
+- A parse-error "kill" does not count: re-ran that mutant as a valid `pass` (killed).
