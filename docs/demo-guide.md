@@ -162,6 +162,11 @@ restart), the server-side session and its order are gone. The app then:
 Tap the mic to carry on. If background retries have run out, the tap re-opens
 the socket.
 
+If the shared Azure OpenAI quota is hit mid-order, the carhop doesn't freeze: the
+answer is retried silently, then the guest hears a short local "Sorry, give me just
+a second." clip while it's retried again, and if it's still busy the screen asks
+them to say it again (`config.yaml` → `resilience.rate_limit`).
+
 Browser-socket compression (permessage-deflate) is off (`config.yaml` →
 `connection.ws_compression: false`). aiohttp 3.14.2/3.14.3 kill a compressed
 socket with close 1002 ("non-zero reserved bits") after a ping/pong

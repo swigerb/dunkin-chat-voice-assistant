@@ -10,7 +10,9 @@
     "status": {
         "notRecordingMessage": "¡Pidamos un café!",
         "conversationInProgress": "Conversación en progreso",
-        "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido."
+        "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido.",
+        "rateLimitRetrying": "Perdón, dame un segundito…",
+        "rateLimitFinal": "Estamos un poco ocupados. ¿Puedes repetirlo, por favor?"
     },
     "history": {
         "transcriptHistory": "Historial de transcripciones",

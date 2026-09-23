@@ -27,6 +27,15 @@ describe("connection-lost notice", () => {
     });
 });
 
+describe("rate-limit notices", () => {
+    it.each(LOCALES.filter(([locale]) => locale !== "en"))("are translated in %s, not copied from English", (_locale, strings: any) => {
+        for (const key of ["rateLimitRetrying", "rateLimitFinal"]) {
+            expect(strings.status[key].length).toBeGreaterThan(0);
+            expect(strings.status[key]).not.toBe((en as any).status[key]);
+        }
+    });
+});
+
 describe("locale strings", () => {
     it.each(LOCALES)("%s has no template leftovers", (_locale, strings) => {
         const offenders = flatten(strings).filter(([, text]) => TEMPLATE_LEFTOVERS.some(re => re.test(text)));

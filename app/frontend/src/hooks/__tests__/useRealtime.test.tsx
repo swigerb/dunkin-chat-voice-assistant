@@ -83,3 +83,17 @@ describe("useRealTime connection lifecycle", () => {
         expect(byType("session.update")[1]).not.toBe(false);
     });
 });
+
+describe("useRealTime middle-tier extensions", () => {
+    it("hands extension.rate_limited to its callback", () => {
+        const onReceivedRateLimited = vi.fn();
+        const onReceivedError = vi.fn();
+        renderHook(() => useRealTime({ onReceivedRateLimited, onReceivedError }));
+
+        const payload = { type: "extension.rate_limited", attempt: 2, final: true };
+        act(() => last().options.onMessage({ data: JSON.stringify(payload) } as MessageEvent));
+
+        expect(onReceivedRateLimited).toHaveBeenCalledWith(payload);
+        expect(onReceivedError).not.toHaveBeenCalled();
+    });
+});
