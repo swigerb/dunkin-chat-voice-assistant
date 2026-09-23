@@ -726,22 +726,38 @@ class MiddleTierRehydrationTests(unittest.IsolatedAsyncioTestCase):
 
         for cause in (speech, transcript, browser_response):
             with self.subTest(cause=cause.__name__):
-                async with MiddleTierHarness() as h:
+                silence_over = asyncio.Event()
+
+                def configure(rtmt):
+                    async def nudge_sleep(delay):
+                        await silence_over.wait()
+                    rtmt._nudge_sleep = nudge_sleep
+
+                async with MiddleTierHarness(configure=configure) as h:
                     h.sessions.nudge_after_seconds = 0.15
                     sid, meta = await self._conversation(h)
                     b = await self._resume(h, meta)
                     await cause(h, b)
-                    await asyncio.sleep(0.4)
+                    await h.settle()
+                    silence_over.set()      # the silence would end only after the guest spoke
+                    await h.settle()
+                    await asyncio.sleep(0.2)
                     frames = h.upstream.frames()
                     self.assertEqual(len(system_items(frames)), 1, "only the rehydration, no nudge")
                     self.assertLessEqual(len(h.upstream.frames(kind="response.create")), 1)
                     h.sessions.end_session(sid)
 
     async def test_the_nudge_is_skipped_while_a_rate_limit_retry_is_pending(self):
+        silence_over = asyncio.Event()
+
         def configure(rtmt):
             async def blocked_sleep(delay):
                 await asyncio.Event().wait()
+
+            async def nudge_sleep(delay):
+                await silence_over.wait()
             rtmt._sleep = blocked_sleep
+            rtmt._nudge_sleep = nudge_sleep
 
         async with MiddleTierHarness(configure=configure) as h:
             h.sessions.nudge_after_seconds = 0.1
@@ -749,7 +765,9 @@ class MiddleTierRehydrationTests(unittest.IsolatedAsyncioTestCase):
             await self._resume(h, meta)
             await h.upstream.push(rate_limited_done("r_rl"))
             await h.settle()
-            await asyncio.sleep(0.4)
+            silence_over.set()      # the silence ends only once the retry is pending
+            await h.settle()
+            await asyncio.sleep(0.2)
             self.assertEqual(len(system_items(h.upstream.frames())), 1, "no nudge on top of a pending retry")
             self.assertEqual(h.upstream.frames(kind="response.create"), [])
             h.sessions.end_session(sid)

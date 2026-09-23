@@ -637,6 +637,8 @@ class RTMiddleTier:
         # is injectable so tests don't really wait.
         self.rate_limit = RateLimitSettings()
         self._sleep: Callable[[float], Any] = asyncio.sleep
+        # The resume nudge's silence wait (a seam so tests can control when it ends).
+        self._nudge_sleep: Callable[[float], Any] = asyncio.sleep
         if voice_choice is not None:
             logger.info("Realtime voice choice set to %s", voice_choice)
         if isinstance(credentials, AzureKeyCredential):
@@ -1091,7 +1093,7 @@ class RTMiddleTier:
                     """If the guest says nothing for nudge_after_seconds after a resume, have
                     the crew member ask once whether they need anything else. Waits for the
                     same session.updated confirmation as the greeting. Not guest activity."""
-                    await asyncio.sleep(self._sessions.nudge_after_seconds)
+                    await self._nudge_sleep(self._sessions.nudge_after_seconds)
                     await session_configured.wait()
                     if recovery is not None and recovery.retry_pending:
                         # A rate-limited response is about to be retried; a nudge now
