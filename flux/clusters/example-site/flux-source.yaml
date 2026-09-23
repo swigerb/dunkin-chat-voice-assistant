@@ -2,7 +2,7 @@
 # Copy this directory for each physical site (e.g., example-site → store-042).
 #
 # OPERATOR: update the GitRepository URL and branch to point at YOUR fork/repo.
-# Example: https://github.com/mgodfre3/dunkin-chat-voice-assistant (branch: main)
+# Example: https://github.com/my-org/dunkin-chat-voice-assistant (branch: main)
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:

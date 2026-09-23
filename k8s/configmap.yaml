@@ -10,4 +10,6 @@ data:
   CHROMA_DATA_PATH: "/app/chroma_data"
   CHROMA_COLLECTION_NAME: "menu_items"
   AZURE_OPENAI_REALTIME_VOICE_CHOICE: "marin"
+  # OPERATOR: the name of YOUR gpt-realtime-2.1 (2026-07-07) deployment. The
+  # endpoint and key come from your Key Vault (.env -> scripts/deploy-edge.*).
   AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-2.1"
