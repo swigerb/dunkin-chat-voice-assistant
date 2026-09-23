@@ -33,7 +33,7 @@
       "value": "${AZURE_OPENAI_REALTIME_DEPLOYMENT}"
     },
     "openAiRealtimeVoiceChoice": {
-      "value": "${AZURE_OPENAI_REALTIME_VOICE_CHOICE=alloy}"
+      "value": "${AZURE_OPENAI_REALTIME_VOICE_CHOICE=marin}"
     },
     "openAiRealtimeReasoningEffort": {
       "value": "${AZURE_OPENAI_REALTIME_REASONING_EFFORT}"

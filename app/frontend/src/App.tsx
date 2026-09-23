@@ -16,6 +16,7 @@ import useRealTime from "@/hooks/useRealtime";
 import useAzureSpeech from "@/hooks/useAzureSpeech";
 import useAudioRecorder from "@/hooks/useAudioRecorder";
 import useAudioPlayer from "@/hooks/useAudioPlayer";
+import { resolveVoice } from "@/lib/voices";
 
 import { ExtensionMiddleTierToolResponse, ExtensionRoundTripToken, ExtensionSessionMetadata } from "./types";
 
@@ -95,7 +96,7 @@ function CoffeeApp() {
         return stored === null ? true : stored === "true";
     });
     const [voiceChoice, setVoiceChoice] = useState<string>(() => {
-        return localStorage.getItem("voiceChoice") || "coral";
+        return resolveVoice(localStorage.getItem("voiceChoice"));
     });
 
     useEffect(() => {

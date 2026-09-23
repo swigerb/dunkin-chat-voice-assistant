@@ -135,15 +135,17 @@ graph LR
 The settings dialog exposes **ten GA realtime voices**: alloy, ash, ballad,
 coral, echo, sage, shimmer, verse, marin, cedar.
 
-- Change takes effect **immediately** on the live conversation — no redeploy
-  needed.
-- The selection persists in the browser (`localStorage`) and is sent to the
-  middle tier, which issues a `session.update` with
+- No redeploy needed. The selection persists in the browser (`localStorage`)
+  and is sent to the middle tier, which issues a `session.update` with
   `audio.output.voice`.
-- The initial default is `coral` (configured in `app/backend/config.yaml` →
-  `model.default_voice`).
+- The realtime service locks the voice once the assistant has spoken, so a
+  change made mid-conversation applies from the **next** conversation (the next
+  page load).
+- The initial default is `marin` (configured in `app/backend/config.yaml` →
+  `model.default_voice`); OpenAI recommends `marin` and `cedar`.
 
-**Demo tip:** Switch voices mid-conversation to show the live-swap capability.
+**Demo tip:** Pick a voice, refresh the page, then tap the mic to show the
+swap. The greeting is spoken in the new voice.
 
 ---
 

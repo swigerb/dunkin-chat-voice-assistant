@@ -159,12 +159,12 @@ graph LR
 > GA voices** available: alloy, ash, ballad, coral, echo, sage, shimmer, verse,
 > marin, cedar.  Each has a short descriptor.
 >
-> *[Change voice to 'shimmer' or 'echo']*
+> *[Stop the mic, change voice to 'cedar' or 'shimmer', refresh the page, tap the mic]*
 >
-> This takes effect **immediately** — no redeploy.  The browser sends the choice
-> to the middle tier, which issues a `session.update` to the realtime model.
-> The next response comes back in the new voice.  It persists across page
-> refreshes via localStorage."
+> No redeploy.  The browser sends the choice to the middle tier, which issues a
+> `session.update` to the realtime model, and the greeting comes back in the new
+> voice.  The default is marin, which OpenAI recommends alongside cedar.  It
+> persists across page refreshes via localStorage."
 
 ---
 

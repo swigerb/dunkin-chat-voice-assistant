@@ -4,8 +4,10 @@
 model:
   temperature: 0.6
   max_response_output_tokens: 4096
-  # Warm, confident voice for the Dunkin crew persona.
-  default_voice: "coral"
+  # Default realtime voice for the Dunkin crew persona. OpenAI recommends marin
+  # or cedar on gpt-realtime-2.x. Keep in sync with DEFAULT_VOICE in
+  # app/frontend/src/lib/voices.ts. AZURE_OPENAI_REALTIME_VOICE_CHOICE overrides.
+  default_voice: "marin"
   # Input transcription model sent in every session.update. On Azure this is a
   # deployment name; whisper-1 is served by the realtime deployment itself.
   # Override with AZURE_OPENAI_REALTIME_TRANSCRIPTION_MODEL.

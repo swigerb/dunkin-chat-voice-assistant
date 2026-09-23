@@ -8,10 +8,13 @@ If your goal is to reuse existing services (OpenAI or Search), see the [existing
 Run this command to set the voice choice for the real-time deployment:
 
 ```bash
-azd env set AZURE_OPENAI_REALTIME_VOICE_CHOICE <echo, alloy, or shimmer>
+azd env set AZURE_OPENAI_REALTIME_VOICE_CHOICE <marin, cedar, alloy, ash, ballad, coral, echo, sage, shimmer, or verse>
 ```
 
-The default voice choice is `alloy`, but 2 other voices are available.
+The default voice choice is `marin`. All ten built-in gpt-realtime-2.1 voices are available; OpenAI recommends
+`marin` and `cedar` for best quality. Guests can also switch voices in the settings dialog. A change made
+mid-conversation (after the assistant has spoken) applies from the next conversation (next page load), because the realtime
+service locks the voice once assistant audio exists.
 
 Once you have set the voice choice, run `azd up` to apply the changes to the deployed app.
 If you've already run `azd up` and want to first preview the voice with the development server, then update your local `.env` file by running `./scripts/write_env.sh` or `pwsh ./scripts/write_env.ps1`, and then restart the development server.

@@ -87,10 +87,24 @@ class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(mock_instance.reasoning_model, False)
         self.assertEqual(mock_instance.transcription_model, "my-transcribe")
 
-    async def test_default_voice_is_coral(self):
+    async def test_default_voice_is_marin(self):
         mock_cls, _ = await self._run_create_app()
         _, kwargs = mock_cls.call_args
-        self.assertEqual(kwargs["voice_choice"], "coral")
+        self.assertEqual(kwargs["voice_choice"], "marin")
+
+    async def test_default_voice_comes_from_config_yaml(self):
+        with patch("app.get_config", return_value={"model": {"default_voice": "cedar"}}):
+            mock_cls, _ = await self._run_create_app()
+        self.assertEqual(mock_cls.call_args.kwargs["voice_choice"], "cedar")
+
+    async def test_default_voice_falls_back_to_marin_without_config(self):
+        with patch("app.get_config", return_value={}):
+            mock_cls, _ = await self._run_create_app()
+        self.assertEqual(mock_cls.call_args.kwargs["voice_choice"], "marin")
+
+    async def test_voice_env_overrides_config(self):
+        mock_cls, _ = await self._run_create_app({"AZURE_OPENAI_REALTIME_VOICE_CHOICE": "ash"})
+        self.assertEqual(mock_cls.call_args.kwargs["voice_choice"], "ash")
 
     async def test_system_prompt_contains_pull_around_to_next_window(self):
         _, mock_instance = await self._run_create_app()

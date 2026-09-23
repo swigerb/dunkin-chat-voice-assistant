@@ -6,6 +6,7 @@ target) the wrong deployment, or an azd override would never reach the app.
 
 import json
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -74,6 +75,39 @@ class ReasoningOverrideWiringTests(unittest.TestCase):
                 # Only set on the container when non-empty, so config.yaml applies otherwise.
                 self.assertIn(f"empty({param}) ? {{}} : {{ {env_var}: {param} }}", env_block)
                 self.assertIn(env_var, pipeline_vars)
+
+
+class DefaultVoiceTests(unittest.TestCase):
+    """marin everywhere a default voice is set (backend, azd, frontend, edge)."""
+
+    DEFAULT_VOICE = "marin"
+
+    def test_backend_config_default_voice(self):
+        cfg = yaml.safe_load((REPO / "app" / "backend" / "config.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["model"]["default_voice"], self.DEFAULT_VOICE)
+
+    def test_azd_parameter_default(self):
+        self.assertEqual(PARAMETERS["openAiRealtimeVoiceChoice"]["value"],
+                         "${AZURE_OPENAI_REALTIME_VOICE_CHOICE=" + self.DEFAULT_VOICE + "}")
+
+    def test_frontend_default_matches_backend(self):
+        voices_ts = (REPO / "app" / "frontend" / "src" / "lib" / "voices.ts").read_text(encoding="utf-8")
+        self.assertRegex(voices_ts, rf'export const DEFAULT_VOICE = "{self.DEFAULT_VOICE}";')
+
+    def test_frontend_offers_exactly_the_backend_voices(self):
+        sys.path.append(str(REPO / "app" / "backend"))
+        from rtmt import _VALID_VOICES
+        voices_ts = (REPO / "app" / "frontend" / "src" / "lib" / "voices.ts").read_text(encoding="utf-8")
+        offered = re.findall(r'\{ value: "([a-z]+)"', voices_ts)
+        self.assertEqual(sorted(offered), sorted(_VALID_VOICES))
+
+    def test_env_sample_and_edge_manifests(self):
+        sample = (REPO / "app" / "backend" / ".env-sample").read_text(encoding="utf-8")
+        self.assertIn(f"AZURE_OPENAI_REALTIME_VOICE_CHOICE={self.DEFAULT_VOICE}\n", sample)
+        for relpath in ("flux/apps/dunkin-voice/configmap.yaml", "k8s/configmap.yaml"):
+            with self.subTest(relpath=relpath):
+                data = yaml.safe_load((REPO / relpath).read_text(encoding="utf-8"))["data"]
+                self.assertEqual(data["AZURE_OPENAI_REALTIME_VOICE_CHOICE"], self.DEFAULT_VOICE)
 
 
 class EdgeManifestTests(unittest.TestCase):

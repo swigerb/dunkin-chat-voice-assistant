@@ -110,15 +110,17 @@ async def create_app() -> web.Application:
 
         app = web.Application()
 
+        model_cfg = get_config().get("model") or {}
         rtmt = RTMiddleTier(
             credentials=llm_credential,
             endpoint=llm_endpoint,
             deployment=llm_deployment,
-            voice_choice=os.environ.get("AZURE_OPENAI_REALTIME_VOICE_CHOICE") or "coral"
+            voice_choice=(os.environ.get("AZURE_OPENAI_REALTIME_VOICE_CHOICE")
+                          or model_cfg.get("default_voice") or "marin"),
         )
         rtmt.temperature = 0.6
         # Reasoning effort / transcription model from config.yaml + env overrides.
-        configure_realtime_model(rtmt, get_config().get("model") or {})
+        configure_realtime_model(rtmt, model_cfg)
         rtmt.system_message = (
             "You are Dunkin's always-on virtual crew member, proudly representing Inspire Brands. "
             "Guide guests through Dunkin menu decisions, keep the tone energetic yet concise, and double-check every detail with the 'search' tool before responding. "

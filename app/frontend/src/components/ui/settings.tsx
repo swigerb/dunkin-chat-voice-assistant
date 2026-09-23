@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useDummyDataContext } from "@/context/dummy-data-context";
 import { useAzureSpeechOnContext } from "@/context/azure-speech-context";
 import { Tooltip } from "@/components/ui/tooltip";
+import { DEFAULT_VOICE, VOICE_OPTIONS, voiceLabel } from "@/lib/voices";
 
 interface SettingsProps {
     isMobile: boolean;
@@ -77,18 +78,13 @@ export default function Settings({ isMobile, showSessionTokens, onShowSessionTok
                         onChange={(e) => onVoiceChoiceChange(e.target.value)}
                         className="w-56 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
                     >
-                        <option value="alloy">Alloy — Neutral &amp; Versatile</option>
-                        <option value="ash">Ash — Warm &amp; Friendly</option>
-                        <option value="ballad">Ballad — Caring &amp; Soft</option>
-                        <option value="coral">Coral — Confident &amp; Clear</option>
-                        <option value="echo">Echo — Smooth &amp; Resonant</option>
-                        <option value="sage">Sage — Calm &amp; Thoughtful</option>
-                        <option value="shimmer">Shimmer — Cheerful &amp; Bright</option>
-                        <option value="verse">Verse — Natural &amp; Adaptable</option>
-                        <option value="marin">Marin — Fresh &amp; Modern</option>
-                        <option value="cedar">Cedar — Deep &amp; Grounded</option>
+                        {VOICE_OPTIONS.map(v => (
+                            <option key={v.value} value={v.value}>
+                                {v.label}
+                            </option>
+                        ))}
                     </select>
-                    <span className="text-xs text-muted-foreground">Default: Coral</span>
+                    <span className="text-xs text-muted-foreground">Default: {voiceLabel(DEFAULT_VOICE)}</span>
                 </div>
             </div>
             <div className="flex items-start justify-between">
