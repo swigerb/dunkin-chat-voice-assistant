@@ -149,6 +149,26 @@ swap. The greeting is spoken in the new voice.
 
 ---
 
+## If the Connection Drops
+
+When the browser's `/realtime` socket closes (Wi-Fi blip, proxy timeout, app
+restart), the server-side session and its order are gone. The app then:
+
+- stops the mic and shows **"Connection lost. Tap the mic to start a new order."**
+- keeps the old order on screen until the guest taps the mic, then clears it
+- reconnects in the background, but **never restarts the mic on its own**
+- drops mic audio while the socket is down instead of replaying it into the new session
+
+Tap the mic to carry on. If background retries have run out, the tap re-opens
+the socket.
+
+Browser-socket compression (permessage-deflate) is off (`config.yaml` →
+`connection.ws_compression: false`). aiohttp 3.14.2/3.14.3 kill a compressed
+socket with close 1002 ("non-zero reserved bits") after a ping/pong
+([aio-libs/aiohttp#13274](https://github.com/aio-libs/aiohttp/issues/13274)).
+
+---
+
 ## Business Rules the Presenter Should Know
 
 | Rule | Behavior | Configuration |

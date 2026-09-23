@@ -13,7 +13,7 @@ import aiohttp
 from aiohttp import web
 
 from order_state import SessionIdentifiers, order_state_singleton
-from rtmt import Tool, ToolResult, ToolResultDirection
+from rtmt import _WS_COMPRESS, Tool, ToolResult, ToolResultDirection
 
 logger = logging.getLogger("coffee-chat")
 
@@ -585,7 +585,8 @@ class RTLocalPipeline:
     # ------------------------------------------------------------------
 
     async def _websocket_handler(self, request: web.Request) -> web.WebSocketResponse:
-        ws = web.WebSocketResponse()
+        # Same browser client and aiohttp bug as the cloud path (see rtmt._WS_COMPRESS).
+        ws = web.WebSocketResponse(compress=_WS_COMPRESS)
         await ws.prepare(request)
 
         session_id = order_state_singleton.create_session()

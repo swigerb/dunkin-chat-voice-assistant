@@ -12,4 +12,16 @@ describe("StatusMessage", () => {
         expect(screen.getByText("status.conversationInProgress")).toBeInTheDocument();
         expect(container.querySelector(".listening-equalizer")).not.toBeNull();
     });
+
+    it("tells the guest the connection dropped", () => {
+        render(<StatusMessage isRecording={false} notice="lost" />);
+        expect(screen.getByText("status.connectionLost")).toBeInTheDocument();
+        expect(screen.queryByText("status.notRecordingMessage")).toBeNull();
+    });
+
+    it("drops the notice once a conversation is running", () => {
+        render(<StatusMessage isRecording notice="lost" />);
+        expect(screen.getByText("status.conversationInProgress")).toBeInTheDocument();
+        expect(screen.queryByText("status.connectionLost")).toBeNull();
+    });
 });

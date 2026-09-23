@@ -15,6 +15,7 @@ from aiohttp import web
 from azure.core.credentials import AzureKeyCredential
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
+from config_loader import get_config
 from order_state import SessionIdentifiers, order_state_singleton
 
 logger = logging.getLogger("coffee-chat")
@@ -183,6 +184,15 @@ _BOOTSTRAP_CLIENT_SESSION: dict = {
 
 # How long the greeting waits for the service to confirm the session config.
 _SESSION_CONFIGURED_TIMEOUT_SEC = 5.0
+
+# permessage-deflate on the browser socket; off unless config.yaml
+# `connection.ws_compression` is true. aiohttp 3.14.2/3.14.3 kill the socket
+# (1002) on the first compressed frame after an initial PONG (aio-libs/aiohttp#13274).
+def ws_compression_enabled(cfg: dict) -> bool:
+    return bool((cfg.get("connection") or {}).get("ws_compression", False))
+
+
+_WS_COMPRESS = ws_compression_enabled(get_config())
 
 _GREETING_TEXT = "Please greet the guest with: 'Welcome to Dunkin! How may I help you today?'"
 
@@ -742,7 +752,9 @@ class RTMiddleTier:
                 headers["api-key"] = self.key
             else:
                 headers["Authorization"] = f"Bearer {self._token_provider()}" # NOTE: no async version of token provider, maybe refresh token on a timer?
-            async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params) as target_ws:
+            # compress=0: Azure OpenAI declines deflate anyway; don't offer it. (aiohttp's
+            # current default, pinned so a future default change can't turn it on.)
+            async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params, compress=0) as target_ws:
                 session_id = self._session_map.get(ws)
                 greeting_sent = session_id in self._sent_greeting
                 # Per-connection tool call tracking (avoids cross-session interference)
@@ -862,7 +874,7 @@ class RTMiddleTier:
                         del self._session_map[ws]
 
     async def _websocket_handler(self, request: web.Request):
-        ws = web.WebSocketResponse()
+        ws = web.WebSocketResponse(compress=_WS_COMPRESS)
         await ws.prepare(request)
         
         # Create a new session for each WebSocket connection
