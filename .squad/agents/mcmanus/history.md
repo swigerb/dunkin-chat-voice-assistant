@@ -48,3 +48,8 @@
   - `useRealtime` exposes `onConnectionLost({code, reason})`, `isConnected`, `reconnect()`; parks on `onReconnectStop`; audio append/clear use `keep=false`.
   - App ends the conversation on loss, shows `status.connectionLost` (en/es/fr/ja), clears the order on the next tap, and never auto-restarts the mic.
 - Frontend tests 13 → 31. Lockfiles unchanged.
+
+## Round 3 (2026-09-23)
+- R3: es/fr/ja "not recording" copy had Contoso template wording; rewritten per locale. Guard test: no template leftovers + key parity with en.
+- R1 frontend: `extension.rate_limited` → `lib/apology-clip.ts` plays `/audio/apology-<lng>.wav` (UI language, fallback en), mic sending muted while it plays, `StatusMessage` shows `status.rateLimitRetrying` / `status.rateLimitFinal`. Cleared on the answer's first audio, on guest speech, or on stop.
+- Clips: 24 kHz mono PCM16, 2.4–2.9 s, committed under `app/frontend/public/audio/`.

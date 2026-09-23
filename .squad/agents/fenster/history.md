@@ -46,3 +46,8 @@
   - Upstream: `ws_connect(compress=0)`.
   - Same for the edge `/realtime` in `rtmt_local.py`.
 - Cloud path verified with chromadb/onnxruntime **absent** from the venv: full suite green.
+
+## Round 3 (2026-09-23)
+- D1 tool contract: `update_order` rejection reasons `item_quantity_limit`, `order_item_limit`, `extra_in_item_name` (with `suggested_calls`), `extra_without_drink`. Success results now carry `server_text` for the model; the browser still gets the order summary.
+- R1 wiring: `RateLimitSettings.from_config(get_config()["resilience"]["rate_limit"])` in `create_app`; `_process_message_to_client(..., recovery=None)` keeps the old call signature for existing tests.
+- Known leftover: a combined item name is still accepted as-is when an allowed base drink is already in the order (pre-existing behaviour).

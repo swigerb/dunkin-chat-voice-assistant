@@ -82,3 +82,11 @@ Implemented the hybrid local inference path for Azure Local edge deployments, fu
   - 1.5: 12/12, median 1.63 s.
   - 0 off-brand mentions.
   - The 2 effort-none misses: the model sent "Caramel Craze Latte with Extra Espresso Shot" as ONE item, the extras guard rejected it, and the model still said "All set". Keep `low`. Worth a prompt/tool follow-up.
+
+## Round 3 (2026-09-23, branch feat/round3)
+- **dz reasoning test:** `gpt-realtime-2.1-dz` sends `reasoning` under `reasoning_model: auto` (name not hardcoded; azd env sets it). Docs say the deployment name is configurable.
+- **D1 "All set" after a rejected extra — root cause:** rejections were plain prose with no status, AND successful TO_CLIENT results sent the model an *empty* function_call_output, so "rejected" and "added" looked the same to the model. The prompt said nothing about rejections.
+  - Fix: rejections are TO_SERVER JSON `{status:"rejected", item_added:false, reason, message, instructions, suggested_calls}` (the drink, then the extra as its own item); successes send `{status:"ok", ...order_items}` via `ToolResult.server_text` / `model_output()` (cloud + edge). Two prompt sentences: one item per call; only claim an add on status ok.
+  - Live (gpt-realtime-2.1-dz, 5 reps each): FALSE "all set" before 6/20 (natural@none 2, inject@none 2, inject@low 2) → after 0/20; all 20 ended with latte + extra shot in the order.
+- **R1 backend:** per-connection `_RateLimitRecovery` ladder in rtmt.py (silent retry → attempt-1 notice + retry → final). Cancelled on speech_started / foreign response.created / disconnect; only `response.create` is resent, so tool follow-ups never re-run the tool. Config `resilience.rate_limit`, env `RATE_LIMIT_RECOVERY_ENABLED`.
+- **Apology clips:** generated with 2.1 voice marin via `scripts/generate_apology_clips.py`. The transcript must match the phrase word for word or nothing is written.

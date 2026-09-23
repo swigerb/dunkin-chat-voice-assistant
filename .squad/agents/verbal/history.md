@@ -59,3 +59,9 @@ Used `<your-xxx>` angle-bracket placeholders in YAML and `PLACEHOLDER` for the S
 - azd env `dunkin-demo` (local, gitignored): `AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-2.1`, `..._VOICE_CHOICE=marin`. No provision or deploy run.
 - `az bicep build` clean. `role.bicep` guid is deterministic, so re-provisioning against the shared Sonic OpenAI RG is idempotent.
 - **Edge follow-up:** AOAI account `acx-dunkin-edge-openai` needs its own gpt-realtime-2.1 deployment before the configmap change is rolled out.
+
+## Round 3 (2026-09-23)
+- D2: `flux/apps/dunkin-voice/configmap.yaml` pointed every operator at a contributor's AOAI account (`acx-dunkin-edge-openai`). It's now `https://<your-aoai-account>.openai.azure.com/` with an OPERATOR note. Example values generalised: `cadunkinacr`→`myregistry`, `dunkin.adaptivecloudlab.com`→`dunkin.example.com`, `mgodfre3/...`→`my-org/...`.
+- `docs/azure-local-deployment.md`: new "Azure OpenAI: bring your own account" section (deploy gpt-realtime-2.1 version 2026-07-07 in your own account; set endpoint + deployment name).
+- Guard test `test_edge_config_generic.py` covers flux/, k8s/, the edge scripts and edge docs: no `acx-dunkin-edge`, no hardcoded `*.openai.azure.com` / `*.cognitiveservices.azure.com` hosts, no contributor values, no GUIDs.
+- Edge gating (`USE_LOCAL_PIPELINE`, requirements-edge, Dockerfile.edge) untouched.
