@@ -156,6 +156,10 @@ async def create_app() -> web.Application:
     app["crm_repo"] = crm_repo
     app["drive_thru_simulator"] = simulator
     app["drive_thru_demo"] = demo_fleet
+    if not use_local:
+        # Live voice orders appear on the crew dashboard (cloud realtime path;
+        # the local edge pipeline doesn't publish).
+        rtmt.sessions.dashboard = simulator
 
     app.router.add_get("/dashboard", dashboard_socket)
     app.router.add_post("/simulator/spawn", spawn_car)

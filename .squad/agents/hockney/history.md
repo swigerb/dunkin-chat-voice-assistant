@@ -76,3 +76,16 @@
   - R1 backend: final-notice reset; incomplete ≠ failed; second-delay config; end-to-end test through `_forward_messages`.
   - R1 frontend: blocked autoplay; overlapping clips; stop-conversation cleanup; locale not copied from en.
 - Counts: backend 252 → 301, frontend 31 → 61.
+
+## Order resume port (2026-09-24)
+- **Mutation results:** 233 killed, 2 equivalent (both removed as redundant code), 0 surviving.
+  - .env.template 4; idle backend 14; idle frontend 6; infra 12; detach 13; handshake 35+1 equivalent; rehydrate/nudge 37; dashboard 20; frontend resume 85+1 equivalent; e2e 2; nudge deflake 5.
+- **Frontend survivors that became tests:**
+  - stale open flag after a close;
+  - early tap + resume sending nothing twice;
+  - resume_rejected after an early tap not wiping the fresh order;
+  - identifiers kept on a continuing tap;
+  - retries exhausted after a resume → fresh start waits for the greeting.
+- **Flake found and fixed:** the rate-limit nudge-skip test raced a 0.1 s real sleep under full-suite load. It is now event-gated via `_nudge_sleep`, and passed 3/3 full runs.
+- **e2e** (`scripts/e2e_order_resume.py`, msedge): 50/50, run twice. Dashboard no-dedupe mutant: 3 checks fail. No-release mutant: 3 scenarios fail.
+- **Counts:** backend 301 → 394, frontend 65 → 132.

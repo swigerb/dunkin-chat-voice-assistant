@@ -36,6 +36,19 @@ describe("rate-limit notices", () => {
     });
 });
 
+describe("order-resume notices", () => {
+    const KEYS = ["status.reconnecting", "status.resumed", "status.resumedTapToContinue", "status.resumeRejected", "status.superseded", "app.newOrder"];
+    const lookup = (strings: any, key: string) => key.split(".").reduce((node, part) => node?.[part], strings);
+
+    it.each(LOCALES)("exist in %s", (_locale, strings) => {
+        for (const key of KEYS) expect(lookup(strings, key)?.length ?? 0).toBeGreaterThan(0);
+    });
+
+    it.each(LOCALES.filter(([locale]) => locale !== "en"))("are translated in %s, not copied from English", (_locale, strings) => {
+        for (const key of KEYS) expect(lookup(strings, key)).not.toBe(lookup(en, key));
+    });
+});
+
 describe("locale strings", () => {
     it.each(LOCALES)("%s has no template leftovers", (_locale, strings) => {
         const offenders = flatten(strings).filter(([, text]) => TEMPLATE_LEFTOVERS.some(re => re.test(text)));

@@ -17,6 +17,14 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 from config_loader import get_config
 from order_state import SessionIdentifiers, order_state_singleton
+from session_manager import (
+    SESSION_ENDED_CLOSE_CODE,
+    SESSION_ENDED_CLOSE_REASON,
+    SUPERSEDED_CLOSE_CODE,
+    SUPERSEDED_CLOSE_REASON,
+    SessionManager,
+    resume_id_fingerprint,
+)
 
 logger = logging.getLogger("coffee-chat")
 
@@ -167,6 +175,48 @@ _MARKER_SESSION_UPDATE = '"session.update"'
 _MARKER_SESSION_UPDATED = '"session.updated"'
 _MARKER_AUDIO_DELTA = '"response.output_audio.delta"'
 _MARKER_AUDIO_DELTA_LEGACY = '"response.audio.delta"'
+_MARKER_AUDIO_APPEND = '"input_audio_buffer.append"'
+_MARKER_SPEECH_STARTED = '"input_audio_buffer.speech_started"'
+_MARKER_TRANSCRIPTION_COMPLETED = '"conversation.item.input_audio_transcription.completed"'
+_MARKER_RESUME = '"extension.resume"'
+_MARKER_END_SESSION = '"extension.end_session"'
+_MARKER_RESPONSE_CREATE = '"response.create"'
+
+# Fire-and-forget tasks (e.g. closing a superseded socket) kept alive until done.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.ensure_future(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return task
+
+
+async def _close_superseded(stale_ws: web.WebSocketResponse) -> None:
+    try:
+        await stale_ws.close(code=SUPERSEDED_CLOSE_CODE, message=SUPERSEDED_CLOSE_REASON.encode())
+    except Exception:
+        pass
+
+
+def _extension_type(data: str, marker: str) -> str | None:
+    """The `type` of a client frame that contains `marker`, else None (cheap for audio frames)."""
+    if marker not in data:
+        return None
+    try:
+        message = json.loads(data)
+    except ValueError:
+        return None
+    return message.get("type") if isinstance(message, dict) else None
+
+
+def _presented_resume_id(data: str) -> object:
+    try:
+        message = json.loads(data)
+    except ValueError:
+        return None
+    return message.get("resume_id") if isinstance(message, dict) else None
 
 # What the browser's useRealtime.startSession() sends. The middle tier applies
 # the same values itself the moment the upstream socket opens, so a socket the
@@ -578,8 +628,8 @@ class RTMiddleTier:
         self.voice_choice = voice_choice
         self.tools = {}
         self._token_provider = None
-        self._session_map: dict[web.WebSocketResponse, str] = {}
-        self._sent_greeting: set[str] = set()
+        # Socket -> order session, guest activity and the idle close (4000).
+        self._sessions = SessionManager()
         # Flipped if the deployment rejects `reasoning` at runtime despite the
         # name check / switch; from then on it is never sent again.
         self._reasoning_rejected = False
@@ -587,6 +637,8 @@ class RTMiddleTier:
         # is injectable so tests don't really wait.
         self.rate_limit = RateLimitSettings()
         self._sleep: Callable[[float], Any] = asyncio.sleep
+        # The resume nudge's silence wait (a seam so tests can control when it ends).
+        self._nudge_sleep: Callable[[float], Any] = asyncio.sleep
         if voice_choice is not None:
             logger.info("Realtime voice choice set to %s", voice_choice)
         if isinstance(credentials, AzureKeyCredential):
@@ -594,6 +646,14 @@ class RTMiddleTier:
         else:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
+
+    @property
+    def sessions(self) -> SessionManager:
+        return self._sessions
+
+    @property
+    def _session_map(self) -> dict[web.WebSocketResponse, str]:
+        return self._sessions._session_map
 
     def _reasoning_model(self) -> bool:
         """Whether reasoning-model-only fields may be sent upstream at all.
@@ -726,6 +786,7 @@ class RTMiddleTier:
         client_ws: web.WebSocketResponse,
         event_type: str,
         identifiers: SessionIdentifiers | None,
+        extra: dict | None = None,
     ) -> None:
         if identifiers is None:
             return
@@ -735,6 +796,7 @@ class RTMiddleTier:
                 "sessionToken": identifiers.session_token,
                 "roundTripIndex": identifiers.round_trip_index,
                 "roundTripToken": identifiers.round_trip_token,
+                **(extra or {}),
             }
         )
 
@@ -743,7 +805,8 @@ class RTMiddleTier:
             return None
         return _RateLimitRecovery(self.rate_limit, sleep=self._sleep, session_id=session_id)
 
-    async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse, tools_pending: dict[str, "RTToolCall"], guard: "_SessionUpdateGuard | None" = None, recovery: "_RateLimitRecovery | None" = None) -> str | None:
+    async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse, tools_pending: dict[str, "RTToolCall"], guard: "_SessionUpdateGuard | None" = None, recovery: "_RateLimitRecovery | None" = None,
+                                         on_session_created: Callable[[], Any] | None = None) -> str | None:
         data = msg.data
 
         # FAST PATH: extract type via regex without full JSON parse.
@@ -796,7 +859,11 @@ class RTMiddleTier:
                     session["tool_choice"] = "none"
                     session["max_response_output_tokens"] = None
                     updated_message = json.dumps(message)
-                    if session_id is not None:
+                    if on_session_created is not None:
+                        # The forwarder announces the session (metadata or resume)
+                        # once it knows whether this socket is resuming.
+                        await on_session_created()
+                    elif session_id is not None:
                         identifiers = order_state_singleton.get_session_identifiers(session_id)
                         await self._emit_session_identifiers(client_ws, "extension.session_metadata", identifiers)
 
@@ -859,6 +926,11 @@ class RTMiddleTier:
                                         "tool_name": item["name"],
                                         "tool_result": result.to_text()
                                     })
+                                    if item["name"] == "update_order":
+                                        try:
+                                            self._sessions.publish_order(session_id, json.loads(result.to_text()))
+                                        except ValueError:
+                                            pass
                                 updated_message = None
 
                 case "response.done":
@@ -888,6 +960,14 @@ class RTMiddleTier:
                             logging.error(f"Error processing message: {e}")
                         if replace:
                             updated_message = json.dumps(message)
+                    # Remember what the crew member said, for rehydrating a resumed session.
+                    if session_id is not None and "response" in message:
+                        spoken = " ".join(
+                            (content.get("transcript") or content.get("text") or "").strip()
+                            for out_item in message["response"].get("output") or []
+                            if out_item.get("type") == "message"
+                            for content in out_item.get("content") or [])
+                        self._sessions.record_turn(session_id, "crew", spoken)
                     if session_id is not None:
                         identifiers = order_state_singleton.advance_round_trip(session_id)
                         await self._emit_session_identifiers(client_ws, "extension.round_trip_token", identifiers)
@@ -934,8 +1014,8 @@ class RTMiddleTier:
             # compress=0: Azure OpenAI declines deflate anyway; don't offer it. (aiohttp's
             # current default, pinned so a future default change can't turn it on.)
             async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params, compress=0) as target_ws:
-                session_id = self._session_map.get(ws)
-                greeting_sent = session_id in self._sent_greeting
+                session_id = self._sessions.get_session_id(ws)
+                greeting_sent = self._sessions.has_sent_greeting(session_id)
                 # Per-connection tool call tracking (avoids cross-session interference)
                 tools_pending: dict[str, RTToolCall] = {}
                 # Per-connection session state. GA locks the voice once the
@@ -945,6 +1025,17 @@ class RTMiddleTier:
                 session_configured = asyncio.Event()
                 guard = _SessionUpdateGuard()
                 recovery = self.new_rate_limit_recovery(session_id)
+
+                # ── Resume handshake (one decision per socket) ──
+                # A resume is honoured only as the first client frame. Until that
+                # decision is made (first frame, or first_frame_timeout), the
+                # announcement is held back so a socket gets exactly one of
+                # extension.session_metadata / extension.session_resumed.
+                resume_decided = asyncio.Event()
+                upstream_created = False
+                announced = False
+                # Silent-guest nudge after a mid-conversation resume (once per resume).
+                nudge_task: asyncio.Task | None = None
 
                 # Configure the upstream session before relaying a single
                 # browser frame, so no socket ever runs on service defaults.
@@ -962,8 +1053,7 @@ class RTMiddleTier:
                         logger.warning("No session.updated within %.1fs — greeting anyway (trigger=%s)",
                                        _SESSION_CONFIGURED_TIMEOUT_SEC, trigger)
                     greeting_sent = True
-                    if session_id is not None:
-                        self._sent_greeting.add(session_id)
+                    self._sessions.mark_greeting_sent(session_id)
                     await target_ws.send_json({
                         "type": "conversation.item.create",
                         "item": {
@@ -976,9 +1066,129 @@ class RTMiddleTier:
                     })
                     await target_ws.send_json({"type": "response.create"})
 
+                async def announce_fresh():
+                    """Send extension.session_metadata (with a resume id) once the resume
+                    decision is made and the upstream session exists."""
+                    nonlocal announced
+                    if announced or not resume_decided.is_set() or not upstream_created or session_id is None:
+                        return
+                    announced = True
+                    identifiers = order_state_singleton.get_session_identifiers(session_id)
+                    resume_id = self._sessions.issue_resume_id(session_id)
+                    await self._emit_session_identifiers(ws, "extension.session_metadata", identifiers,
+                                                         extra={"resumeId": resume_id} if resume_id else None)
+
+                async def on_session_created():
+                    nonlocal upstream_created
+                    upstream_created = True
+                    await announce_fresh()
+
+                async def first_frame_deadline():
+                    await asyncio.sleep(self._sessions.first_frame_timeout_seconds)
+                    if not resume_decided.is_set():
+                        resume_decided.set()
+                        await announce_fresh()
+
+                async def nudge_after_silence():
+                    """If the guest says nothing for nudge_after_seconds after a resume, have
+                    the crew member ask once whether they need anything else. Waits for the
+                    same session.updated confirmation as the greeting. Not guest activity."""
+                    await self._nudge_sleep(self._sessions.nudge_after_seconds)
+                    await session_configured.wait()
+                    if recovery is not None and recovery.retry_pending:
+                        # A rate-limited response is about to be retried; a nudge now
+                        # would stack a second response on top of it.
+                        logger.info("Resume nudge skipped: a rate-limit retry is pending (session=%s)", session_id)
+                        return
+                    logger.info("Guest silent %.0fs after resume; crew nudges (session=%s)",
+                                self._sessions.nudge_after_seconds, session_id)
+                    await target_ws.send_str(self._sessions.build_nudge_item())
+                    await target_ws.send_json({"type": "response.create"})
+
+                def cancel_nudge(reason: str) -> None:
+                    nonlocal nudge_task
+                    if nudge_task is not None and not nudge_task.done():
+                        nudge_task.cancel()
+                        logger.info("Resume nudge cancelled: %s (session=%s)", reason, session_id)
+                    nudge_task = None
+
+                async def handle_resume(data: str):
+                    nonlocal session_id, announced, greeting_sent, nudge_task
+                    presented = _presented_resume_id(data)
+                    outcome = self._sessions.resume(ws, presented)
+                    resume_decided.set()
+                    if not outcome.accepted:
+                        logger.info("Resume rejected (reason=%s, resume id %s); starting fresh session %s",
+                                    outcome.reason, resume_id_fingerprint(presented), session_id)
+                        await ws.send_json({"type": "extension.resume_rejected", "reason": outcome.reason})
+                        await announce_fresh()
+                        return
+                    session_id = outcome.session_id
+                    if recovery is not None:
+                        recovery._session_id = session_id
+                    if outcome.stale_ws is not None:
+                        _spawn(_close_superseded(outcome.stale_ws))
+                    identifiers = order_state_singleton.get_session_identifiers(session_id)
+                    announced = True
+                    await ws.send_json({
+                        "type": "extension.session_resumed",
+                        "order_summary": json.loads(order_state_singleton.get_order_summary(session_id).model_dump_json()),
+                        "session_token": identifiers.session_token,
+                        "round_trip_index": identifiers.round_trip_index,
+                        "round_trip_token": identifiers.round_trip_token,
+                        "resume_id": outcome.resume_id,
+                    })
+                    if not outcome.conversation_started:
+                        return                  # never greeted: the normal greeting still runs
+                    # Mid-conversation: no greeting, no "welcome back". Brief the new
+                    # upstream (after the bootstrap session.update, before any
+                    # response.create) and stay silent until the guest speaks.
+                    greeting_sent = True
+                    await target_ws.send_str(self._sessions.build_rehydration_item(session_id))
+                    logger.info("Resumed session %s rehydrated (%d recent turns); greeting suppressed",
+                                session_id, len(self._sessions.recent_turns(session_id)))
+                    if self._sessions.nudge_after_seconds > 0:
+                        nudge_task = asyncio.ensure_future(nudge_after_silence())
+
+                async def reject_late_resume(data: str):
+                    nonlocal announced
+                    logger.info("Resume rejected (reason=not_first_frame, resume id %s); session %s continues",
+                                resume_id_fingerprint(_presented_resume_id(data)), session_id)
+                    await ws.send_json({"type": "extension.resume_rejected", "reason": "not_first_frame"})
+                    # The browser drops its stored id on any rejection, so re-announce
+                    # this socket's own session (with a rotated id) if already announced.
+                    if announced:
+                        announced = False
+                        await announce_fresh()
+
                 async def from_client_to_server():
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
+                            # Resume handshake: only the very first client frame may resume.
+                            if not resume_decided.is_set():
+                                if _extension_type(msg.data, _MARKER_RESUME) == "extension.resume":
+                                    await handle_resume(msg.data)
+                                    continue
+                                resume_decided.set()
+                                await announce_fresh()
+                            # Resume frames are not guest activity: a drop must not
+                            # extend the idle budget.
+                            if _extension_type(msg.data, _MARKER_RESUME) == "extension.resume":
+                                await reject_late_resume(msg.data)
+                                continue
+                            if _extension_type(msg.data, _MARKER_END_SESSION) == "extension.end_session":
+                                logger.info("Guest ended session %s", session_id)
+                                self._sessions.end_session(session_id, "guest ended the session")
+                                await ws.close(code=SESSION_ENDED_CLOSE_CODE, message=SESSION_ENDED_CLOSE_REASON.encode())
+                                break
+                            # Guest activity drives the idle clock. Mic frames stream
+                            # constantly (silence included), so they don't count; the
+                            # guest actually speaking does (speech_started/transcripts
+                            # from upstream), and so does any control frame (a tap).
+                            if _MARKER_AUDIO_APPEND not in msg.data:
+                                self._sessions.touch_activity(session_id)
+                                if _MARKER_RESPONSE_CREATE in msg.data:
+                                    cancel_nudge("guest-initiated response")
                             # Intercept extension.set_voice — don't forward to OpenAI
                             if _MARKER_SET_VOICE in msg.data:
                                 try:
@@ -1029,8 +1239,18 @@ class RTMiddleTier:
                             elif _MARKER_SESSION_UPDATED in data:
                                 guard.on_session_updated()
                                 session_configured.set()
+                            elif _MARKER_SPEECH_STARTED in data:
+                                self._sessions.touch_activity(session_id)
+                                cancel_nudge("guest speech")
+                            elif _MARKER_TRANSCRIPTION_COMPLETED in data:
+                                self._sessions.touch_activity(session_id)
+                                cancel_nudge("guest transcript")
+                                try:
+                                    self._sessions.record_turn(session_id, "guest", json.loads(data).get("transcript"))
+                                except (ValueError, AttributeError):
+                                    pass
                             new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending, guard,
-                                                                            recovery)
+                                                                            recovery, on_session_created=on_session_created)
                             if new_msg is not None:
                                 if ws.closed:
                                     break
@@ -1038,6 +1258,7 @@ class RTMiddleTier:
                         else:
                             logger.warning("Unexpected message type from server: %s", msg.type)
 
+                deadline_task = asyncio.ensure_future(first_frame_deadline())
                 try:
                     await asyncio.gather(from_client_to_server(), from_server_to_client())
                 except (ConnectionResetError, ConnectionError,
@@ -1047,28 +1268,38 @@ class RTMiddleTier:
                 except Exception:
                     logger.exception("Unexpected error in realtime message forwarding")
                 finally:
+                    deadline_task.cancel()
+                    cancel_nudge("socket closed")
                     if recovery is not None:
                         recovery.cancel("connection closed")
-                    if session_id is not None:
-                        order_state_singleton.delete_session(session_id)
-                        self._sent_greeting.discard(session_id)
-                    # Clean up the session map when the connection is closed
-                    if ws in self._session_map:
-                        del self._session_map[ws]
+                    self._sessions.detach_session(ws, session_id, reason=f"client close code={ws.close_code}")
 
     async def _websocket_handler(self, request: web.Request):
         ws = web.WebSocketResponse(compress=_WS_COMPRESS)
         await ws.prepare(request)
-        
-        # Create a new session for each WebSocket connection
-        session_id = order_state_singleton.create_session()
-        self._session_map[ws] = session_id
 
-        await self._forward_messages(ws, client_request_id=request.headers.get("x-ms-client-request-id"))
+        # A new order session for each WebSocket connection.
+        self._sessions.create_session(ws)
+
+        try:
+            await self._forward_messages(ws, client_request_id=request.headers.get("x-ms-client-request-id"))
+        finally:
+            # Covers an upstream connect failure, which never reaches the
+            # forwarder's own cleanup. A no-op if that already ran.
+            self._sessions.detach_session(ws, self._sessions.get_session_id(ws),
+                                          reason=f"handler exit code={ws.close_code}")
         return ws
-    
+
+    async def _start_background_tasks(self, _app: web.Application) -> None:
+        self._sessions.start_idle_checker()
+
+    async def _stop_background_tasks(self, _app: web.Application) -> None:
+        await self._sessions.stop_idle_checker()
+
     def attach_to_app(self, app: web.Application, path: str) -> None:
         app.router.add_get(path, self._websocket_handler)
+        app.on_startup.append(self._start_background_tasks)
+        app.on_cleanup.append(self._stop_background_tasks)
 
 
 def configure_realtime_model(rtmt: RTMiddleTier, model_cfg: dict, environ: Any = None) -> RTMiddleTier:

@@ -90,3 +90,21 @@ Implemented the hybrid local inference path for Azure Local edge deployments, fu
   - Live (gpt-realtime-2.1-dz, 5 reps each): FALSE "all set" before 6/20 (natural@none 2, inject@none 2, inject@low 2) → after 0/20; all 20 ended with latte + extra shot in the order.
 - **R1 backend:** per-connection `_RateLimitRecovery` ladder in rtmt.py (silent retry → attempt-1 notice + retry → final). Cancelled on speech_started / foreign response.created / disconnect; only `response.create` is resent, so tool follow-ups never re-run the tool. Config `resilience.rate_limit`, env `RATE_LIMIT_RECOVERY_ENABLED`.
 - **Apology clips:** generated with 2.1 voice marin via `scripts/generate_apology_clips.py`. The transcript must match the phrase word for word or nothing is written.
+
+## Order resume port (2026-09-24, branch feat/order-resume from dev @ a4a25bd)
+- **Step 0.5, idle close (Dunkin had none):**
+  - `SessionManager.close_idle_sessions` checks every `security.idle_check_interval_seconds` (15) and closes after `security.idle_timeout_seconds` (300) with 4000 `idle_timeout`.
+  - Mic frames aren't guest activity; speech, transcripts and control frames are.
+- **Step 2, handshake:**
+  - `extension.resume` is honoured only as the first client frame.
+  - Resume ids: `token_urlsafe(32)`, stored as sha256, single-use and rotated on every resume, logged as sha256[:8] only.
+  - Rejections: `expired`, `unknown`, `not_first_frame`.
+  - A second socket on the same session supersedes the first (4002).
+  - Removed the redundant `first_frame_pending` flag (its mutant was equivalent).
+- **Step 3:**
+  - The new upstream gets the bootstrap session.update, then ONE system rehydration item (order + last 6 turns / 2000 chars), then no greeting.
+  - One nudge after `resume.nudge_after_seconds` (30) of silence. It is skipped if a rate-limit retry is pending, and cancelled by guest speech, a transcript or a browser response.create.
+  - `_nudge_sleep` seam added so the nudge tests are deterministic. One full-suite run had shown a 0.1 s race.
+- **Edge:**
+  - The flux configmap runs `USE_LOCAL_PIPELINE=false`, i.e. the cloud `rtmt.py` path, so resume applies on edge too.
+  - `rtmt_local.py` (`USE_LOCAL_PIPELINE=true`) has no resume, idle close or dashboard publishing; its tests are untouched and pass with chromadb/onnxruntime absent.

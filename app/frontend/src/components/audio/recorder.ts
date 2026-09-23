@@ -4,18 +4,28 @@ export class Recorder {
     private mediaStream: MediaStream | null = null;
     private mediaStreamSource: MediaStreamAudioSourceNode | null = null;
     private workletNode: AudioWorkletNode | null = null;
+    // A suspended AudioContext only resumes after a user gesture; don't hang on it.
+    private static readonly RESUME_TIMEOUT_MS = 1500;
 
     public constructor(onDataAvailable: (buffer: Iterable<number>) => void) {
         this.onDataAvailable = onDataAvailable;
     }
 
-    async start(stream: MediaStream) {
+    /** Resolves true when capture is running; false (mic released) otherwise. */
+    async start(stream: MediaStream): Promise<boolean> {
         try {
             if (this.audioContext) {
                 await this.audioContext.close();
             }
 
             this.audioContext = new AudioContext({ sampleRate: 24000 });
+
+            if (this.audioContext.state === "suspended") {
+                await Promise.race([this.audioContext.resume(), new Promise(resolve => setTimeout(resolve, Recorder.RESUME_TIMEOUT_MS))]);
+                if ((this.audioContext.state as AudioContextState) !== "running") {
+                    throw new Error("AudioContext is suspended until a user gesture");
+                }
+            }
 
             await this.audioContext.audioWorklet.addModule("./audio-processor-worklet.js");
 
@@ -29,8 +39,11 @@ export class Recorder {
 
             this.mediaStreamSource.connect(this.workletNode);
             this.workletNode.connect(this.audioContext.destination);
+            return true;
         } catch (error) {
-            this.stop();
+            await this.stop();
+            stream.getTracks().forEach(track => track.stop());
+            return false;
         }
     }
 

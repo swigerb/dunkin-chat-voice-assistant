@@ -34,12 +34,13 @@ export default function useAudioRecorder({ onAudioRecorded }: Parameters) {
         }
     };
 
-    const start = async () => {
+    /** getUserMedia rejections propagate; false means capture could not start (e.g. no user gesture). */
+    const start = async (): Promise<boolean> => {
         if (!audioRecorder.current) {
             audioRecorder.current = new Recorder(handleAudioData);
         }
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioRecorder.current.start(stream);
+        return audioRecorder.current.start(stream);
     };
 
     const stop = async () => {

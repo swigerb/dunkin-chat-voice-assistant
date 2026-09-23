@@ -53,3 +53,16 @@
 - R3: es/fr/ja "not recording" copy had Contoso template wording; rewritten per locale. Guard test: no template leftovers + key parity with en.
 - R1 frontend: `extension.rate_limited` → `lib/apology-clip.ts` plays `/audio/apology-<lng>.wav` (UI language, fallback en), mic sending muted while it plays, `StatusMessage` shows `status.rateLimitRetrying` / `status.rateLimitFinal`. Cleared on the answer's first audio, on guest speech, or on stop.
 - Clips: 24 kHz mono PCM16, 2.4–2.9 s, committed under `app/frontend/public/audio/`.
+
+## Order resume port (2026-09-24)
+- **`useRealtime`:**
+  - Resume id in sessionStorage (`dunkin.resumeId`, per tab); `extension.resume` is the literal first frame.
+  - The hook owns the queue; react-use-websocket is only ever called with keep=false.
+  - `classifyClose` sorts closes into idle / superseded / ended / transport. Only transport reconnects: 10 tries, 1 s doubling to 30 s, plus jitter.
+  - ended (1000 `session_ended`) re-opens a fresh socket at once. Dunkin has no token endpoint, so there is no token wait.
+- **App:**
+  - Notices: reconnecting / resumed / tap-to-continue / resume rejected / superseded.
+  - Mic auto-restarts after a resume; `recorder.start()` reports false after a 1.5 s suspended-context timeout.
+  - "Start a new order" button.
+- **Delta from Sonic:** a tap made while still reconnecting now starts the mic as soon as the resume lands. Sonic waited for the 5 s greeting safety timer.
+- **Tests:** frontend 65 → 132.

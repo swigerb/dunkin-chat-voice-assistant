@@ -53,3 +53,23 @@ forward the error to the browser. If the rejected update carried `reasoning` / `
 the backend stops sending those for the rest of the process. The browser only sees the error if the
 fallback is also rejected, and there is never a second fallback. Unrelated errors pass through
 unchanged. Look for `Upstream REJECTED session.update` in the logs.
+
+## Scaling, session affinity and secrets (order resume)
+
+Orders and the order-resume grace hold (see [order_resume.md](order_resume.md)) live in the backend process's memory,
+so:
+
+- **One worker per container.** `app/Dockerfile` and `app/Dockerfile.edge` run gunicorn with `--workers 1`. With two
+  workers a reconnect has about a 50% chance of reaching a process that doesn't have the order. aiohttp is async, so
+  one worker carries many conversations.
+- **Sticky ingress.** `infra/main.bicep` sets `stickySessionsAffinity: 'sticky'` on the backend Container App
+  (`ingress.stickySessions.affinity`). Envoy sets an affinity cookie on the page load and the browser sends it on the
+  websocket upgrade, so a reconnect lands on the same replica. Sticky sessions need single revision mode, the default
+  in `infra/core/host/container-app.bicep`. Replica bounds are unchanged. A resume still falls back to a fresh order
+  when that replica is gone (scale-in, restart, redeploy).
+- **Edge (k8s / Flux).** The edge Deployments run one replica and the Service has no affinity; keep `replicas: 1` or add
+  affinity before scaling out.
+- **EasyAuth secret.** The Container App template always sends a secrets list, which replaces the app's secrets. When
+  `AZURE_AUTH_ENABLED=true` and `AZURE_AUTH_CLIENT_SECRET` is set in the azd environment, it is sent as
+  `aad-client-secret` on every provision. When it is empty (secret set out-of-band with `az containerapp secret set`),
+  the existing `aad-client-secret` is read back from the app and re-sent, so a provision doesn't remove it.

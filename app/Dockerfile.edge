@@ -47,4 +47,4 @@ COPY --from=build-stage /backend/static /app/static
 # Enable local pipeline by default for edge deployments.
 ENV USE_LOCAL_PIPELINE=true
 
-CMD ["python3", "-m", "gunicorn", "app:create_app", "-b", "0.0.0.0:8000", "--worker-class", "aiohttp.GunicornWebWorker", "--timeout", "120", "--keep-alive", "65", "--graceful-timeout", "30"]
+CMD ["python3", "-m", "gunicorn", "app:create_app", "-b", "0.0.0.0:8000", "--workers", "1", "--worker-class", "aiohttp.GunicornWebWorker", "--timeout", "120", "--keep-alive", "65", "--graceful-timeout", "30"]

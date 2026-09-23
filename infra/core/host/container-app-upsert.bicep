@@ -67,6 +67,13 @@ param keyvaultIdentities object = {}
 @description('The environment variables for the container in key value pairs')
 param env object = {}
 
+@description('Names of secrets that already exist on the app (e.g. set out-of-band with `az containerapp secret set`) and must survive this deployment when `secrets` does not supply them.')
+param preserveExistingSecretNames array = []
+
+@description('Ingress session affinity: none | sticky (sticky requires single revision mode)')
+@allowed(['none', 'sticky'])
+param stickySessionsAffinity string = 'none'
+
 @description('Specifies if the resource ingress is exposed externally')
 param external bool = true
 
@@ -106,7 +113,19 @@ module app 'container-app.bicep' = {
     daprEnabled: daprEnabled
     daprAppId: daprAppId
     daprAppProtocol: daprAppProtocol
-    secrets: secrets
+    // container-app.bicep always sends a secrets list, which replaces the app's
+    // secrets, so named out-of-band secrets are read back and re-sent. ARM
+    // evaluates only the taken branch, so listSecrets() never runs against an
+    // app that doesn't exist yet.
+    secrets: union(
+      exists && !empty(preserveExistingSecretNames)
+        ? toObject(
+            #disable-next-line BCP422
+            filter(existingApp.listSecrets().value, s => contains(preserveExistingSecretNames, s.name) && !contains(secrets, s.name)),
+            s => s.name,
+            s => s.value)
+        : {},
+      secrets)
     keyvaultIdentities: keyvaultIdentities
     allowedOrigins: allowedOrigins
     external: external
@@ -118,6 +137,7 @@ module app 'container-app.bicep' = {
     ]
     imageName: !empty(imageName) ? imageName : exists ? existingApp.properties.template.containers[0].image : ''
     targetPort: targetPort
+    stickySessionsAffinity: stickySessionsAffinity
     serviceBinds: serviceBinds
   }
 }

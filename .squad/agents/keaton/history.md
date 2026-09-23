@@ -193,3 +193,11 @@
 - Only a deploy can confirm:
   - real production rate-limit behaviour and clip playback / mic mute in a browser;
   - an operator's edge cluster applying the placeholder config with their own AOAI account.
+
+## Order resume review (2026-09-24)
+- **Commits on feat/order-resume:** daf6683 (.env.template), 8376080 (idle close), f4283af (step 0 infra), 8554085 (step 1 detach), 49043b1 (step 2 handshake), 4b6b02a (step 3 rehydrate/nudge), c94771d (dashboard), 9a70e5c (frontend), f96cc60 (e2e), 3a5d843 (nudge test deflake). Not pushed, merged or deployed.
+- **Only a deploy can confirm:**
+  - sticky affinity plus the single worker in ACA;
+  - the secret surviving `azd provision`;
+  - the real model obeying the rehydration item (no re-greet) and the nudge wording;
+  - real-network drop timing against the 120 s hold.
