@@ -37,6 +37,11 @@ with `reasoning_model: auto`: 1.5 rejects `reasoning` and `parallel_tool_calls` 
 `session.update` with them, tools included), so the backend never sends them to a 1.5 deployment. If
 you use a custom deployment name for 1.5, set `AZURE_OPENAI_REALTIME_REASONING_MODEL=false`.
 
+The deployment name is configurable: `azd env set AZURE_OPENAI_REALTIME_DEPLOYMENT <name>`. Any name that
+isn't recognised as gpt-4o / gpt-realtime-1.x is treated as a reasoning model, so suffixed names such as
+`gpt-realtime-2.1-dz` (a DataZoneStandard deployment of the same model) get `reasoning` without any
+extra setting.
+
 ### Rejected `session.update` fallback
 
 The realtime service rejects a `session.update` as a whole if any single field is unsupported, and it
