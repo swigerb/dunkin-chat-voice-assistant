@@ -6,6 +6,22 @@ model:
   max_response_output_tokens: 4096
   # Warm, confident voice for the Dunkin crew persona.
   default_voice: "coral"
+  # Input transcription model sent in every session.update. On Azure this is a
+  # deployment name; whisper-1 is served by the realtime deployment itself.
+  # Override with AZURE_OPENAI_REALTIME_TRANSCRIPTION_MODEL.
+  transcription_model: "whisper-1"
+  # reasoning.effort for reasoning realtime models (gpt-realtime-2 / 2.1):
+  # none | minimal | low | medium | high | xhigh. "" (or off) omits `reasoning`.
+  # Override with AZURE_OPENAI_REALTIME_REASONING_EFFORT.
+  reasoning_effort: "low"
+  # Whether the deployment accepts `reasoning` / `parallel_tool_calls`:
+  # auto (infer from the deployment name; gpt-realtime-1.5 / gpt-4o are not
+  # reasoning models) | true | false. Override with
+  # AZURE_OPENAI_REALTIME_REASONING_MODEL. Rolling back to gpt-realtime-1.5 is
+  # safe with "auto": nothing reasoning-only is sent.
+  reasoning_model: "auto"
+  # parallel_tool_calls for reasoning models; null leaves the service default.
+  parallel_tool_calls: null
 
 vad:
   type: "server_vad"

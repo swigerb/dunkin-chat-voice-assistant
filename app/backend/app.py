@@ -7,6 +7,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.identity import AzureDeveloperCliCredential, DefaultAzureCredential
 from dotenv import load_dotenv
 
+from config_loader import get_config
 from crm import CRMRepository
 from dashboard import (
     complete_car,
@@ -18,7 +19,7 @@ from dashboard import (
     stop_demo_mode,
 )
 from drive_thru import DriveThruDemoFleet, DriveThruSimulator
-from rtmt import RTMiddleTier
+from rtmt import RTMiddleTier, configure_realtime_model
 from tools import attach_tools_rtmt
 
 logging.basicConfig(level=logging.INFO)
@@ -116,6 +117,8 @@ async def create_app() -> web.Application:
             voice_choice=os.environ.get("AZURE_OPENAI_REALTIME_VOICE_CHOICE") or "coral"
         )
         rtmt.temperature = 0.6
+        # Reasoning effort / transcription model from config.yaml + env overrides.
+        configure_realtime_model(rtmt, get_config().get("model") or {})
         rtmt.system_message = (
             "You are Dunkin's always-on virtual crew member, proudly representing Inspire Brands. "
             "Guide guests through Dunkin menu decisions, keep the tone energetic yet concise, and double-check every detail with the 'search' tool before responding. "

@@ -17,7 +17,7 @@ Owns the realtime voice pipeline: the Azure OpenAI Realtime API surface, the Web
 - Model lifecycle: GA versus Preview, retirement dates, regional availability
 
 ## Working notes
-- `gpt-4o-realtime-preview` is **retired** and cannot be deployed. Target `gpt-realtime-1.5` (2026-02-23, GlobalStandard) — the latest GA, retiring 2027-08-24. `gpt-realtime-2` and `-2.1` are Preview with much earlier retirement dates.
+- `gpt-4o-realtime-preview` is **retired** and cannot be deployed. Target `gpt-realtime-2.1` (2026-07-07, GlobalStandard, GA) with `reasoning.effort: low` (Sonic parity, 2026-09). `gpt-realtime-1.5` (2026-02-23) remains the rollback target: it rejects `reasoning` / `parallel_tool_calls` (and the whole session.update with them), so never send them to it.
 - The GA endpoint is `/openai/v1/realtime` addressed by `model=`, not `/openai/realtime` with `api-version=` and `deployment=`.
 - GA renames events: `response.audio.*` -> `response.output_audio.*`, `conversation.item.created` -> `conversation.item.added`.
 - GA requires a `type: "realtime"` discriminator on the session object and **rejects unknown parameters outright**. Most audio settings moved under `audio.input` / `audio.output`. Translate the legacy client shape in the middle tier so the browser contract stays stable.

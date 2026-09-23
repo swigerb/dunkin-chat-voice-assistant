@@ -35,6 +35,15 @@
     "openAiRealtimeVoiceChoice": {
       "value": "${AZURE_OPENAI_REALTIME_VOICE_CHOICE=alloy}"
     },
+    "openAiRealtimeReasoningEffort": {
+      "value": "${AZURE_OPENAI_REALTIME_REASONING_EFFORT}"
+    },
+    "openAiRealtimeReasoningModel": {
+      "value": "${AZURE_OPENAI_REALTIME_REASONING_MODEL}"
+    },
+    "openAiRealtimeTranscriptionModel": {
+      "value": "${AZURE_OPENAI_REALTIME_TRANSCRIPTION_MODEL}"
+    },
     "searchIndexName": {
       "value": "${AZURE_SEARCH_INDEX=voicerag-intvect}"
     },
