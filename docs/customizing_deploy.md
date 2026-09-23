@@ -36,3 +36,15 @@ An unset azd value means the `config.yaml` value applies. Rolling back to `gpt-r
 with `reasoning_model: auto`: 1.5 rejects `reasoning` and `parallel_tool_calls` (and the whole
 `session.update` with them, tools included), so the backend never sends them to a 1.5 deployment. If
 you use a custom deployment name for 1.5, set `AZURE_OPENAI_REALTIME_REASONING_MODEL=false`.
+
+### Rejected `session.update` fallback
+
+The realtime service rejects a `session.update` as a whole if any single field is unsupported, and it
+reports this only as an `error` event. That means one bad field silently drops every tool. So every
+`session.update` the backend sends carries an `event_id`. When a rejection correlates to one of them
+(by `error.event_id`, or as the oldest unacknowledged update when the error has no id), the backend
+sends **one** minimal update with only `instructions`, `tools` and `tool_choice`, and does not
+forward the error to the browser. If the rejected update carried `reasoning` / `parallel_tool_calls`,
+the backend stops sending those for the rest of the process. The browser only sees the error if the
+fallback is also rejected, and there is never a second fallback. Unrelated errors pass through
+unchanged. Look for `Upstream REJECTED session.update` in the logs.
