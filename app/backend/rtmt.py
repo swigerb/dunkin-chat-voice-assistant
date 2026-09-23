@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import re
@@ -149,8 +150,47 @@ _VALID_VOICES = frozenset({
     "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"
 })
 
-# Fast marker for extension.set_voice detection.
+# Fast markers (raw-string checks, no JSON parse on the hot path).
 _MARKER_SET_VOICE = '"extension.set_voice"'
+_MARKER_SESSION_UPDATE = '"session.update"'
+_MARKER_SESSION_UPDATED = '"session.updated"'
+_MARKER_AUDIO_DELTA = '"response.output_audio.delta"'
+_MARKER_AUDIO_DELTA_LEGACY = '"response.audio.delta"'
+
+# What the browser's useRealtime.startSession() sends. The middle tier applies
+# the same values itself the moment the upstream socket opens, so a socket the
+# browser never configures (e.g. react-use-websocket reconnected while the mic
+# was live) still runs with our instructions, tools and voice.
+_BOOTSTRAP_CLIENT_SESSION: dict = {
+    "turn_detection": {
+        "type": "server_vad",
+        "threshold": 0.7,
+        "prefix_padding_ms": 300,
+        "silence_duration_ms": 500,
+    },
+    "input_audio_transcription": {"model": "whisper-1"},
+}
+
+# How long the greeting waits for the service to confirm the session config.
+_SESSION_CONFIGURED_TIMEOUT_SEC = 5.0
+
+_GREETING_TEXT = "Please greet the guest with: 'Welcome to Dunkin! How may I help you today?'"
+
+
+def _strip_output_voice(ga_session: dict) -> bool:
+    """Remove `audio.output.voice` from a GA session in place. Returns True if removed."""
+    audio = ga_session.get("audio")
+    if not isinstance(audio, dict):
+        return False
+    output = audio.get("output")
+    if not isinstance(output, dict) or "voice" not in output:
+        return False
+    output.pop("voice")
+    if not output:
+        audio.pop("output")
+    if not audio:
+        ga_session.pop("audio")
+    return True
 
 
 class ToolResultDirection(Enum):
@@ -219,6 +259,52 @@ class RTMiddleTier:
         else:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
+
+    def _build_session(self, session: dict, voice_locked: bool = False) -> dict:
+        """Overlay the server-owned configuration onto a legacy-shaped session
+        and translate it to the GA shape.
+
+        `voice_locked` must be True once the upstream conversation contains
+        assistant audio. From then on GA rejects any session.update whose voice
+        differs from the current one with `cannot_update_voice` -- and it
+        rejects the WHOLE event, so tools, tool_choice and instructions are
+        lost along with the voice.
+        """
+        if self.system_message is not None:
+            session["instructions"] = self.system_message
+        if self.temperature is not None:
+            session["temperature"] = self.temperature
+        if self.max_tokens is not None:
+            session["max_response_output_tokens"] = self.max_tokens
+        if self.disable_audio is not None:
+            session["disable_audio"] = self.disable_audio
+        if self.voice_choice is not None:
+            session["voice"] = self.voice_choice
+        session["tool_choice"] = "auto" if len(self.tools) > 0 else "none"
+        session["tools"] = [tool.schema for tool in self.tools.values()]
+        # Translate to the GA shape so the browser contract is unchanged
+        # and unsupported legacy keys are dropped rather than rejected.
+        ga_session = _to_ga_session(session)
+        if voice_locked and _strip_output_voice(ga_session):
+            logger.info("session.update: assistant audio already present — omitting voice so the update is not rejected")
+        return ga_session
+
+    def build_bootstrap_session_update(self) -> str:
+        """Serialise the session.update sent as the very first frame on every
+        upstream socket, before any browser traffic is relayed.
+
+        Without it the upstream session runs on service defaults (no tools,
+        generic instructions, server VAD auto-responding) until the browser's
+        own session.update arrives -- and if the model speaks in that window the
+        voice locks and our later session.update is rejected wholesale, so the
+        tools are never registered for that conversation.
+        """
+        session = self._build_session(copy.deepcopy(_BOOTSTRAP_CLIENT_SESSION))
+        return json.dumps({"type": "session.update", "session": session})
+
+    def build_voice_update(self, voice: str) -> str:
+        """Serialise a voice-only session.update in the GA shape."""
+        return json.dumps({"type": "session.update", "session": _to_ga_session({"voice": voice})})
 
     async def _emit_session_identifiers(
         self,
@@ -354,7 +440,7 @@ class RTMiddleTier:
 
         return updated_message
 
-    async def _process_message_to_server(self, msg: str, ws: web.WebSocketResponse) -> str | None:
+    async def _process_message_to_server(self, msg: str, ws: web.WebSocketResponse, voice_locked: bool = False) -> str | None:
         data = msg.data
 
         # FAST PATH: input_audio_buffer.append is the most frequent client message.
@@ -368,68 +454,67 @@ class RTMiddleTier:
         if message is not None:
             match message["type"]:
                 case "session.update":
-                    session = message["session"]
-                    if self.system_message is not None:
-                        session["instructions"] = self.system_message
-                    if self.temperature is not None:
-                        session["temperature"] = self.temperature
-                    if self.max_tokens is not None:
-                        session["max_response_output_tokens"] = self.max_tokens
-                    if self.disable_audio is not None:
-                        session["disable_audio"] = self.disable_audio
-                    if self.voice_choice is not None:
-                        session["voice"] = self.voice_choice
-                    session["tool_choice"] = "auto" if len(self.tools) > 0 else "none"
-                    session["tools"] = [tool.schema for tool in self.tools.values()]
-                    # Translate to the GA shape so the browser contract is unchanged
-                    # and unsupported legacy keys are dropped rather than rejected.
-                    session = _to_ga_session(session)
-                    message["session"] = session
+                    message["session"] = self._build_session(message["session"], voice_locked=voice_locked)
                     updated_message = json.dumps(message)
 
         return updated_message
 
-    async def _forward_messages(self, ws: web.WebSocketResponse):
+    async def _forward_messages(self, ws: web.WebSocketResponse, client_request_id: str | None = None):
         async with aiohttp.ClientSession(base_url=self.endpoint) as session:
             params = {"model": self.deployment}
             headers = {}
-            if "x-ms-client-request-id" in ws.headers:
-                headers["x-ms-client-request-id"] = ws.headers["x-ms-client-request-id"]
+            # Correlates our upstream call with the browser's request in AOAI logs.
+            # (`ws.headers` are the *response* headers, so read it off the request.)
+            if client_request_id:
+                headers["x-ms-client-request-id"] = client_request_id
             if self.key is not None:
-                headers = { "api-key": self.key }
+                headers["api-key"] = self.key
             else:
-                headers = { "Authorization": f"Bearer {self._token_provider()}" } # NOTE: no async version of token provider, maybe refresh token on a timer?
+                headers["Authorization"] = f"Bearer {self._token_provider()}" # NOTE: no async version of token provider, maybe refresh token on a timer?
             async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params) as target_ws:
                 session_id = self._session_map.get(ws)
                 greeting_sent = session_id in self._sent_greeting
                 # Per-connection tool call tracking (avoids cross-session interference)
                 tools_pending: dict[str, RTToolCall] = {}
+                # Per-connection session state. GA locks the voice once the
+                # conversation holds assistant audio; `session_configured` is
+                # set by the first upstream `session.updated`.
+                assistant_audio_seen = False
+                session_configured = asyncio.Event()
 
-                async def send_greeting_once():
+                # Configure the upstream session before relaying a single
+                # browser frame, so no socket ever runs on service defaults.
+                await target_ws.send_str(self.build_bootstrap_session_update())
+
+                async def send_greeting_once(trigger: str):
                     nonlocal greeting_sent
-                    if greeting_sent:
-                        return
+                    # Wait for the service to confirm our instructions/tools/voice
+                    # before asking it to speak. Greeting on defaults would lock
+                    # the default voice and let the browser's session.update be
+                    # rejected with cannot_update_voice.
+                    try:
+                        await asyncio.wait_for(session_configured.wait(), timeout=_SESSION_CONFIGURED_TIMEOUT_SEC)
+                    except TimeoutError:
+                        logger.warning("No session.updated within %.1fs — greeting anyway (trigger=%s)",
+                                       _SESSION_CONFIGURED_TIMEOUT_SEC, trigger)
+                    greeting_sent = True
+                    if session_id is not None:
+                        self._sent_greeting.add(session_id)
                     await target_ws.send_json({
                         "type": "conversation.item.create",
                         "item": {
                             "type": "message",
                             "role": "user",
                             "content": [
-                                {"type": "input_text", "text": "Please greet the guest with: 'Welcome to Dunkin! How may I help you today?'"}
+                                {"type": "input_text", "text": _GREETING_TEXT}
                             ]
                         }
                     })
                     await target_ws.send_json({"type": "response.create"})
-                    greeting_sent = True
-                    if session_id is not None:
-                        self._sent_greeting.add(session_id)
+
                 async def from_client_to_server():
-                    session_configured = False
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
-                            if not greeting_sent:
-                                await send_greeting_once()
-
                             # Intercept extension.set_voice — don't forward to OpenAI
                             if _MARKER_SET_VOICE in msg.data:
                                 try:
@@ -439,25 +524,25 @@ class RTMiddleTier:
                                         if new_voice in _VALID_VOICES:
                                             previous_voice = self.voice_choice
                                             self.voice_choice = new_voice
-                                            logger.info("[VOICE] Voice change: %s → %s", previous_voice, new_voice)
-                                            if session_configured:
-                                                # Mid-session: send GA-shaped session.update
-                                                ga_session = _to_ga_session({"voice": new_voice})
-                                                await target_ws.send_str(json.dumps({
-                                                    "type": "session.update",
-                                                    "session": ga_session,
-                                                }))
-                                            # else: pre-session — voice included in next full session.update
+                                            if assistant_audio_seen:
+                                                # GA would reject the update (cannot_update_voice).
+                                                logger.info("[VOICE] Voice change %s → %s applies next conversation "
+                                                            "(assistant audio already present)", previous_voice, new_voice)
+                                            else:
+                                                logger.info("[VOICE] Voice change: %s → %s", previous_voice, new_voice)
+                                                await target_ws.send_str(self.build_voice_update(new_voice))
                                         continue
                                 except (json.JSONDecodeError, KeyError):
                                     pass
 
-                            new_msg = await self._process_message_to_server(msg, ws)
+                            new_msg = await self._process_message_to_server(msg, ws, voice_locked=assistant_audio_seen)
                             if new_msg is not None:
                                 await target_ws.send_str(new_msg)
-                                # Mark session configured after first session.update
-                                if not session_configured and '"session.update"' in msg.data:
-                                    session_configured = True
+                            # The browser has configured its session: greet once the
+                            # service confirms. Awaited here so no browser audio is
+                            # relayed ahead of the greeting.
+                            if not greeting_sent and _MARKER_SESSION_UPDATE in msg.data:
+                                await send_greeting_once("client-session.update")
                         else:
                             logger.warning("Unexpected message type from client: %s", msg.type)
                     
@@ -470,8 +555,14 @@ class RTMiddleTier:
                             logger.warning("Timed out closing Azure OpenAI connection")
                         
                 async def from_server_to_client():
+                    nonlocal assistant_audio_seen
                     async for msg in target_ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
+                            data = msg.data
+                            if _MARKER_AUDIO_DELTA in data or _MARKER_AUDIO_DELTA_LEGACY in data:
+                                assistant_audio_seen = True
+                            elif _MARKER_SESSION_UPDATED in data:
+                                session_configured.set()
                             new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending)
                             if new_msg is not None:
                                 if ws.closed:
@@ -504,7 +595,7 @@ class RTMiddleTier:
         session_id = order_state_singleton.create_session()
         self._session_map[ws] = session_id
 
-        await self._forward_messages(ws)
+        await self._forward_messages(ws, client_request_id=request.headers.get("x-ms-client-request-id"))
         return ws
     
     def attach_to_app(self, app: web.Application, path: str) -> None:

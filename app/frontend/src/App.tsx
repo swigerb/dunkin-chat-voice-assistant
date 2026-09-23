@@ -243,8 +243,10 @@ function CoffeeApp() {
                 azureSpeech.startSession();
                 await startAudioRecording();
             } else {
-                realtime.startSession();
+                // Voice first: the middle tier applies it before the greeting,
+                // so the greeting isn't spoken (and the voice locked) in the old one.
                 realtime.sendVoiceChoice(voiceChoice);
+                realtime.startSession();
 
                 // Safety: if we never receive the greeting completion, start the mic after a short timeout.
                 window.setTimeout(() => {
