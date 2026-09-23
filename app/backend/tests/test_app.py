@@ -36,6 +36,17 @@ class GetBoolEnvTests(unittest.TestCase):
             self.assertFalse(_get_bool_env("MISSING_VAR"))
 
 
+class SystemPromptTests(unittest.TestCase):
+
+    def test_cloud_and_edge_paths_share_one_prompt(self):
+        """scripts/smoke_realtime.py sends DUNKIN_SYSTEM_PROMPT, so both paths must use it."""
+        import app
+        source = Path(app.__file__).read_text(encoding="utf-8")
+        self.assertEqual(source.count("rtmt.system_message = "), 2)
+        self.assertEqual(source.count("rtmt.system_message = DUNKIN_SYSTEM_PROMPT\n"), 2)
+        self.assertIn("unmistakably Dunkin", app.DUNKIN_SYSTEM_PROMPT)
+
+
 class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
     """Tests for create_app voice choice and system prompt configuration."""
 
