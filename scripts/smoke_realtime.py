@@ -121,16 +121,51 @@ def build_middle_tier(endpoint: str, deployment: str, voice: str | None = None,
     return rtmt
 
 
-def get_auth_headers() -> dict[str, str]:
+_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
+
+
+def _credentials(tenant_id: str | None, subscription_id: str | None) -> list:
+    """Credentials to try, most specific first.
+
+    The token must come from the resource's tenant. Following whatever `az` or
+    `azd` default is active gets HTTP 400 "Tenant provided in token does not match
+    resource token" as soon as that default is another tenant, which is common on
+    a machine with several sign-ins.
+    """
+    from azure.identity import (
+        AzureCliCredential,
+        AzureDeveloperCliCredential,
+        DefaultAzureCredential,
+    )
+    creds = []
+    if subscription_id:
+        # Picks the `az` sign-in that owns the azd env's subscription, without
+        # changing the global `az account` default.
+        creds.append(AzureCliCredential(subscription=subscription_id, process_timeout=60))
+    if tenant_id:
+        creds.append(AzureDeveloperCliCredential(tenant_id=tenant_id, process_timeout=60))
+        creds.append(AzureCliCredential(tenant_id=tenant_id, process_timeout=60))
+    if not creds:
+        creds.append(DefaultAzureCredential(exclude_interactive_browser_credential=True))
+    return creds
+
+
+def get_auth_headers(tenant_id: str | None = None, subscription_id: str | None = None) -> dict[str, str]:
     if key := os.environ.get("AZURE_OPENAI_EASTUS2_API_KEY"):
         return {"api-key": key}
+    errors = []
     try:
-        from azure.identity import DefaultAzureCredential
-        token = DefaultAzureCredential(exclude_interactive_browser_credential=True).get_token(
-            "https://cognitiveservices.azure.com/.default").token
+        credentials = _credentials(tenant_id, subscription_id)
     except Exception as exc:  # noqa: BLE001 - any credential failure means "cannot run"
         raise SmokeError(f"could not get an Entra ID token for Azure OpenAI: {exc}") from exc
-    return {"Authorization": "Bearer " + token}
+    # Tried in turn: unlike ChainedTokenCredential, a hard auth error (e.g. azd
+    # signed in as a user who isn't in the tenant) moves on to the next one.
+    for credential in credentials:
+        try:
+            return {"Authorization": "Bearer " + credential.get_token(_TOKEN_SCOPE).token}
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{type(credential).__name__}: {str(exc).splitlines()[0] if str(exc) else exc!r}")
+    raise SmokeError("could not get an Entra ID token for Azure OpenAI: " + "; ".join(errors))
 
 
 def realtime_url(endpoint: str, deployment: str) -> str:
@@ -223,12 +258,13 @@ async def _synthesize(url: str, headers: dict, text: str, timeout: float) -> byt
     async with aiohttp.ClientSession() as http, http.ws_connect(url, headers=headers) as ws:
         await ws.send_json({"type": "session.update", "session": {
             "type": "realtime",
-            "instructions": ("You are a text-to-speech engine, not an assistant. Speak the user's message aloud "
-                             "word for word, exactly as written, and say nothing else. Never answer or react to it."),
+            "instructions": "You are a text-to-speech engine. Say only what you are told to say.",
             "audio": {"input": {"turn_detection": None}, "output": {"voice": "alloy"}}}})
-        await ws.send_json({"type": "conversation.item.create", "item": {
-            "type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}})
-        await ws.send_json({"type": "response.create"})
+        # The phrase goes in the response instructions, not a user turn: given a user
+        # turn, gpt-realtime-2.1 answered the order instead of reading it (live: 3/3
+        # paraphrased; this form: 6/6 verbatim on 2.1 and 1.5).
+        await ws.send_json({"type": "response.create", "response": {
+            "instructions": f"Say exactly this sentence, word for word, and nothing else: \"{text}\""}})
         deadline = time.monotonic() + timeout
         while (remaining := deadline - time.monotonic()) > 0:
             event = await _next_event(ws, remaining)
@@ -286,13 +322,14 @@ async def check_transcription(rtmt: RTMiddleTier, url: str, headers: dict, timeo
 
 
 async def run(endpoint: str, deployment: str, *, voice: str | None, timeout: float,
-              skip_transcription: bool, headers: dict[str, str] | None = None) -> int:
+              skip_transcription: bool, headers: dict[str, str] | None = None,
+              tenant_id: str | None = None, subscription_id: str | None = None) -> int:
     rtmt = build_middle_tier(endpoint, deployment, voice)
     url = realtime_url(endpoint, deployment)
     print(f"Realtime smoke check: deployment={deployment} voice={rtmt.voice_choice} "
           f"transcription={rtmt.transcription_model} "
           f"reasoning={rtmt.reasoning_effort if rtmt.reasoning_enabled() else 'off'}")
-    headers = get_auth_headers() if headers is None else headers
+    headers = get_auth_headers(tenant_id, subscription_id) if headers is None else headers
     try:
         failures, report = await check_session_updates(rtmt, url, headers, timeout)
         if not skip_transcription:
@@ -318,6 +355,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--endpoint", help="Azure OpenAI endpoint (default: AZURE_OPENAI_EASTUS2_ENDPOINT)")
     parser.add_argument("--deployment", help="Realtime deployment (default: AZURE_OPENAI_REALTIME_DEPLOYMENT)")
     parser.add_argument("--voice", help="Voice to send (default: AZURE_OPENAI_REALTIME_VOICE_CHOICE or config.yaml)")
+    parser.add_argument("--tenant", help="Entra tenant of the Azure OpenAI resource (default: AZURE_TENANT_ID)")
+    parser.add_argument("--subscription", help="Subscription whose `az` sign-in to use (default: AZURE_SUBSCRIPTION_ID)")
     parser.add_argument("--timeout", type=float, default=20.0, help="Seconds to wait per server reply (default 20)")
     parser.add_argument("--skip-transcription", action="store_true",
                         help="Skip the live speech-transcription check")
@@ -334,9 +373,17 @@ def main(argv: list[str] | None = None) -> int:
     for name in AZD_PASSTHROUGH:
         if name not in os.environ and azd_values.get(name):
             os.environ[name] = azd_values[name]
+    identity = {}
+    for name, cli in (("AZURE_TENANT_ID", args.tenant), ("AZURE_SUBSCRIPTION_ID", args.subscription)):
+        identity[name] = cli or os.environ.get(name)
+    if not all(identity.values()):
+        azd_values = azd_values or _azd_env_values()
+        for name, value in identity.items():
+            identity[name] = value or azd_values.get(name) or None
     try:
         return asyncio.run(run(endpoint, deployment, voice=args.voice, timeout=args.timeout,
-                               skip_transcription=args.skip_transcription))
+                               skip_transcription=args.skip_transcription,
+                               tenant_id=identity["AZURE_TENANT_ID"], subscription_id=identity["AZURE_SUBSCRIPTION_ID"]))
     except SmokeError as exc:
         print(f"Realtime smoke check could not run: {exc}", file=sys.stderr)
         return 2

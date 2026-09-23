@@ -8,6 +8,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import yaml
@@ -157,6 +158,42 @@ class CheckSessionTests(unittest.TestCase):
                 self.assertEqual(len(failures), 1, failures)
 
 
+class SynthesizeTests(unittest.IsolatedAsyncioTestCase):
+    """The test audio must be the phrase read aloud, not the model's reply to it."""
+
+    async def test_phrase_is_sent_as_response_instructions_not_a_user_turn(self):
+        received = []
+
+        async def handler(request):
+            ws = web.WebSocketResponse()
+            await ws.prepare(request)
+            async for msg in ws:
+                event = json.loads(msg.data)
+                received.append(event)
+                if event["type"] == "response.create":
+                    await ws.send_json({"type": "response.output_audio.delta", "delta": "AAAA"})
+                    await ws.send_json({"type": "response.done"})
+            return ws
+
+        app = web.Application()
+        app.router.add_get("/openai/v1/realtime", handler)
+        server = TestServer(app)
+        await server.start_server()
+        try:
+            url = smoke_realtime.realtime_url(str(server.make_url("")), "gpt-realtime-2.1")
+            pcm = await smoke_realtime._synthesize(url, {}, smoke_realtime.TRANSCRIPTION_PHRASE, 5)
+        finally:
+            await server.close()
+
+        self.assertEqual(pcm, b"\x00\x00\x00")
+        kinds = [e["type"] for e in received]
+        self.assertNotIn("conversation.item.create", kinds)
+        create = next(e for e in received if e["type"] == "response.create")
+        self.assertIn(f'"{smoke_realtime.TRANSCRIPTION_PHRASE}"', create["response"]["instructions"])
+        self.assertIn("word for word", create["response"]["instructions"])
+        self.assertIsNone(received[0]["session"]["audio"]["input"]["turn_detection"])
+
+
 class LiveShapeTests(unittest.IsolatedAsyncioTestCase):
     """End to end against a fake GA endpoint (no Azure)."""
 
@@ -233,6 +270,128 @@ class MainTests(unittest.TestCase):
                 if saved[n] is not None:
                     os.environ[n] = saved[n]
         self.assertEqual(seen, {n: azd[n] for n in app_settings})
+
+
+class TenantTests(unittest.TestCase):
+    """The token must come from the resource's tenant, not the active `az` or `azd` default."""
+
+    NAMES = ["AZURE_TENANT_ID", "AZURE_SUBSCRIPTION_ID", "AZURE_OPENAI_EASTUS2_ENDPOINT",
+             "AZURE_OPENAI_REALTIME_DEPLOYMENT"]
+    AZD = {"AZURE_OPENAI_EASTUS2_ENDPOINT": "https://x", "AZURE_OPENAI_REALTIME_DEPLOYMENT": "d",
+           "AZURE_TENANT_ID": "azd-tenant", "AZURE_SUBSCRIPTION_ID": "azd-sub"}
+    EXPLICIT = ["--endpoint", "https://x", "--deployment", "d"]
+
+    def _main_identity(self, argv, env, azd):
+        seen = {}
+
+        async def fake_run(*_a, **kwargs):
+            seen["identity"] = (kwargs.get("tenant_id"), kwargs.get("subscription_id"))
+            return 0
+        saved = {n: os.environ.pop(n, None) for n in self.NAMES}
+        try:
+            os.environ.update(env)
+            with patch.object(smoke_realtime, "_azd_env_values", return_value=azd), \
+                    patch.object(smoke_realtime, "run", fake_run):
+                self.assertEqual(smoke_realtime.main(argv), 0)
+        finally:
+            for n in self.NAMES:
+                os.environ.pop(n, None)
+                if saved[n] is not None:
+                    os.environ[n] = saved[n]
+        return seen["identity"]
+
+    def test_azd_env_identity_is_used(self):
+        self.assertEqual(self._main_identity([], {}, self.AZD), ("azd-tenant", "azd-sub"))
+
+    def test_azd_env_identity_is_used_even_with_explicit_endpoint_and_deployment(self):
+        self.assertEqual(self._main_identity(self.EXPLICIT, {}, self.AZD), ("azd-tenant", "azd-sub"))
+
+    def test_env_then_cli_override_azd(self):
+        env = {"AZURE_TENANT_ID": "env-tenant", "AZURE_SUBSCRIPTION_ID": "env-sub"}
+        self.assertEqual(self._main_identity([], env, self.AZD), ("env-tenant", "env-sub"))
+        self.assertEqual(self._main_identity(["--tenant", "cli-tenant", "--subscription", "cli-sub"], env, self.AZD),
+                         ("cli-tenant", "cli-sub"))
+
+    def test_each_value_falls_back_to_azd_independently(self):
+        self.assertEqual(self._main_identity(["--tenant", "cli-tenant"], {}, self.AZD), ("cli-tenant", "azd-sub"))
+        self.assertEqual(self._main_identity([], {"AZURE_SUBSCRIPTION_ID": "env-sub"}, self.AZD),
+                         ("azd-tenant", "env-sub"))
+
+    def test_nothing_anywhere_is_none(self):
+        self.assertEqual(self._main_identity(self.EXPLICIT, {}, {}), (None, None))
+
+    def test_run_passes_identity_to_auth(self):
+        seen = {}
+
+        def fake_auth(*args):
+            seen["args"] = args
+            raise smoke_realtime.SmokeError("stop here")
+        with patch.object(smoke_realtime, "get_auth_headers", fake_auth), \
+                self.assertRaises(smoke_realtime.SmokeError):
+            asyncio.run(smoke_realtime.run("https://x", "d", voice=None, timeout=1, skip_transcription=True,
+                                           tenant_id="t", subscription_id="s"))
+        self.assertEqual(seen["args"], ("t", "s"))
+
+    def _auth(self, tenant_id, subscription_id, fail=()):
+        """Returns (headers or SmokeError, credentials built, credentials asked for a token)."""
+        built, asked = [], []
+
+        class FakeCred:
+            def __init__(self, kind, **kwargs):
+                self.kind = kind
+                built.append((kind, kwargs.get("tenant_id") or kwargs.get("subscription")))
+
+            def get_token(self, *scopes, **_kw):
+                asked.append(self.kind)
+                if self.kind in fail:
+                    raise RuntimeError(f"{self.kind} said no\nsecond line")
+                return SimpleNamespace(token=f"tok-{self.kind}", expires_on=0)
+
+        def az(**k):
+            return FakeCred("az-sub" if k.get("subscription") else "az", **k)
+
+        import azure.identity as identity
+        with patch.dict(os.environ, {"AZURE_OPENAI_EASTUS2_API_KEY": ""}), \
+                patch.object(identity, "AzureDeveloperCliCredential", lambda **k: FakeCred("azd", **k)), \
+                patch.object(identity, "AzureCliCredential", az), \
+                patch.object(identity, "DefaultAzureCredential", lambda **k: FakeCred("default", **k)):
+            try:
+                result = smoke_realtime.get_auth_headers(tenant_id, subscription_id)
+            except smoke_realtime.SmokeError as exc:
+                result = exc
+        return result, built, asked
+
+    def test_subscription_first_then_tenant_pinned_clis(self):
+        headers, built, asked = self._auth("tenant-x", "sub-y")
+        self.assertEqual(built, [("az-sub", "sub-y"), ("azd", "tenant-x"), ("az", "tenant-x")])
+        self.assertEqual(asked, ["az-sub"])
+        self.assertEqual(headers, {"Authorization": "Bearer " + "tok-az-sub"})
+
+    def test_hard_failure_moves_on_to_the_next_credential(self):
+        headers, _, asked = self._auth("tenant-x", "sub-y", fail=("az-sub", "azd"))
+        self.assertEqual(asked, ["az-sub", "azd", "az"])
+        self.assertEqual(headers, {"Authorization": "Bearer " + "tok-az"})
+
+    def test_all_failing_reports_every_credential(self):
+        err, _, asked = self._auth("tenant-x", "sub-y", fail=("az-sub", "azd", "az"))
+        self.assertIsInstance(err, smoke_realtime.SmokeError)
+        self.assertEqual(asked, ["az-sub", "azd", "az"])
+        self.assertIn("az-sub said no", str(err))
+        self.assertIn("azd said no", str(err))
+        self.assertNotIn("second line", str(err))
+
+    def test_tenant_only_pins_both_clis(self):
+        _, built, _ = self._auth("tenant-x", None)
+        self.assertEqual(built, [("azd", "tenant-x"), ("az", "tenant-x")])
+
+    def test_subscription_only(self):
+        _, built, _ = self._auth(None, "sub-y")
+        self.assertEqual(built, [("az-sub", "sub-y")])
+
+    def test_nothing_falls_back_to_default_credential(self):
+        headers, built, _ = self._auth(None, None)
+        self.assertEqual(built, [("default", None)])
+        self.assertEqual(headers, {"Authorization": "Bearer " + "tok-default"})
 
 
 class PostdeployHookTests(unittest.TestCase):

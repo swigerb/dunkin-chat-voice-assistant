@@ -76,6 +76,11 @@ azd env set DUNKIN_SKIP_REALTIME_SMOKE true          # turn the hook off
 
 Exit codes: `0` passed, `1` a check failed (the model would run without its tools), `2` could not run.
 
+The token is requested for the azd env's `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, not for
+whichever `az` or `azd` account is currently active. So the check still works when you are also signed
+in to another tenant. It uses the `az` sign-in that owns the subscription, then `azd` and `az` pinned to
+the tenant. Override with `--tenant` / `--subscription`.
+
 ## EasyAuth (Entra ID Authentication) — Optional
 
 The template supports opt-in Entra ID authentication via Container Apps EasyAuth.
