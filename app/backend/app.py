@@ -19,7 +19,7 @@ from dashboard import (
     stop_demo_mode,
 )
 from drive_thru import DriveThruDemoFleet, DriveThruSimulator
-from rtmt import RTMiddleTier, configure_realtime_model
+from rtmt import RateLimitSettings, RTMiddleTier, configure_realtime_model
 from tools import attach_tools_rtmt
 
 logging.basicConfig(level=logging.INFO)
@@ -128,6 +128,8 @@ async def create_app() -> web.Application:
         rtmt.temperature = 0.6
         # Reasoning effort / transcription model from config.yaml + env overrides.
         configure_realtime_model(rtmt, model_cfg)
+        rtmt.rate_limit = RateLimitSettings.from_config(
+            (get_config().get("resilience") or {}).get("rate_limit"))
         rtmt.system_message = DUNKIN_SYSTEM_PROMPT
 
         attach_tools_rtmt(
