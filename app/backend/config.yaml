@@ -56,3 +56,16 @@ connection:
   # and base64 PCM only deflates ~1/3 for ~5x the socket CPU. Revisit once a
   # fixed aiohttp release ships.
   ws_compression: false
+
+resilience:
+  # When a model response is rate-limited (shared Azure OpenAI quota), retry it
+  # instead of leaving the guest in silence: retry 1 is silent; before retry 2
+  # the browser plays a local "Sorry, give me just a second." clip; after that
+  # the browser asks the guest to say it again. A retry hint in the error
+  # ("try again in X s") overrides the delays, clamped to [0.5, 5] s for retry 1
+  # and [2, 8] s for retry 2. Override `enabled` with RATE_LIMIT_RECOVERY_ENABLED.
+  rate_limit:
+    enabled: true
+    retry_delay_seconds: 1.5
+    second_retry_delay_seconds: 4
+    max_retries: 2

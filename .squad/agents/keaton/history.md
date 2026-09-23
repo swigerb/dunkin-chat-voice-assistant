@@ -187,3 +187,9 @@
   - Sonic's idle-4000, token-wait and `response.cancel` parts of item 6 are N/A (Dunkin has none of those features).
   - `/dashboard` socket untouched (server-push only).
   - es/fr/ja `status.notRecordingMessage` still has stale Contoso copy (pre-existing, out of scope).
+
+## Round 3 review (2026-09-23)
+- Commits on feat/round3: 9a2d398 (dz), d41f5bf (R3), ecb4ebf (D2), e4c4b1a (D1), be235fc (R1 backend), 6f7f0c0 (R1 frontend + clips). Not pushed, merged or deployed.
+- Only a deploy can confirm:
+  - real production rate-limit behaviour and clip playback / mic mute in a browser;
+  - an operator's edge cluster applying the placeholder config with their own AOAI account.

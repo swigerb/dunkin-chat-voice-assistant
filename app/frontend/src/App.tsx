@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
-import StatusMessage, { ConnectionNotice } from "@/components/ui/status-message";
+import StatusMessage, { ConnectionNotice, RateLimitNotice } from "@/components/ui/status-message";
 import MenuPanel from "@/components/ui/menu-panel";
 import OrderSummary, { calculateOrderSummary, OrderSummaryProps } from "@/components/ui/order-summary";
 import TranscriptPanel from "@/components/ui/transcript-panel";
@@ -17,6 +17,7 @@ import useAzureSpeech from "@/hooks/useAzureSpeech";
 import useAudioRecorder from "@/hooks/useAudioRecorder";
 import useAudioPlayer from "@/hooks/useAudioPlayer";
 import { resolveVoice } from "@/lib/voices";
+import { playApologyClip } from "@/lib/apology-clip";
 
 import { ExtensionMiddleTierToolResponse, ExtensionRoundTripToken, ExtensionSessionMetadata } from "./types";
 
@@ -130,6 +131,19 @@ function CoffeeApp() {
         orderItemCountRef.current = order.items.length;
     }, [order]);
 
+    // Rate-limit ladder from the middle tier (extension.rate_limited). While the
+    // local apology clip plays the mic is muted, so the clip isn't sent upstream
+    // and transcribed as the guest.
+    const [rateLimitNotice, setRateLimitNotice] = useState<RateLimitNotice>(null);
+    const micMutedRef = useRef(false);
+    const apologyClipRef = useRef<{ stop: () => void } | null>(null);
+    const stopApologyClip = () => {
+        apologyClipRef.current?.stop();
+        apologyClipRef.current = null;
+        micMutedRef.current = false;
+    };
+    const { i18n } = useTranslation();
+
     const realtime = useRealTime({
         enableInputAudioTranscription: true,
         onWebSocketOpen: () => console.log("WebSocket connection opened"),
@@ -147,10 +161,30 @@ function CoffeeApp() {
         onReceivedResponseAudioDelta: message => {
             if (!isSessionActiveRef.current) return;
             greetingAudioSeenRef.current = true;
+            setRateLimitNotice(null);
             playAudio(message.delta);
         },
         onReceivedInputAudioBufferSpeechStarted: () => {
             stopAudioPlayer();
+            setRateLimitNotice(null);
+        },
+        onReceivedRateLimited: ({ final }) => {
+            if (!isSessionActiveRef.current) return;
+            if (final) {
+                stopApologyClip();
+                setRateLimitNotice("busy");
+                return;
+            }
+            setRateLimitNotice("retrying");
+            if (apologyClipRef.current) return;
+            micMutedRef.current = true;
+            const clip = playApologyClip(i18n.resolvedLanguage ?? i18n.language);
+            apologyClipRef.current = clip;
+            void clip.done.then(() => {
+                if (apologyClipRef.current !== clip) return;
+                apologyClipRef.current = null;
+                micMutedRef.current = false;
+            });
         },
         onReceivedExtensionMiddleTierToolResponse: ({ tool_name, tool_result }: ExtensionMiddleTierToolResponse) => {
             if (tool_name === "update_order") {
@@ -243,12 +277,19 @@ function CoffeeApp() {
     const { reset: resetAudioPlayer, play: playAudio, stop: stopAudioPlayer, waitForDrain: waitForAudioDrain } =
         useAudioPlayer();
     const { start: startAudioRecording, stop: stopAudioRecording } = useAudioRecorder({
-        onAudioRecorded: useAzureSpeechOn ? azureSpeech.addUserAudio : realtime.addUserAudio
+        onAudioRecorded: useAzureSpeechOn
+            ? azureSpeech.addUserAudio
+            : base64 => {
+                  if (micMutedRef.current) return;
+                  realtime.addUserAudio(base64);
+              }
     });
 
     const stopConversation = async () => {
         await stopAudioRecording();
         stopAudioPlayer();
+        stopApologyClip();
+        setRateLimitNotice(null);
         isSessionActiveRef.current = false;
         awaitingGreetingDoneRef.current = false;
         if (useAzureSpeechOn) {
@@ -406,7 +447,7 @@ function CoffeeApp() {
                                         </>
                                     )}
                                 </Button>
-                                <StatusMessage isRecording={isRecording} notice={connectionNotice} />
+                                <StatusMessage isRecording={isRecording} notice={connectionNotice} rateLimit={rateLimitNotice} />
                             </div>
                         </div>
                     </Card>

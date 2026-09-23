@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,48 @@ EXTRAS_KEYWORDS = (
 )
 ALLOWED_EXTRA_CATEGORIES = {"signature lattes", "cold beverages"}
 BLOCKED_EXTRA_CATEGORIES = {"donuts & bakery", "breakfast sandwiches"}
+
+# Menu name and price of each extra, for the corrected call suggested when the
+# model folds an extra into the drink's name ("Latte with extra espresso shot").
+EXTRA_MENU_ITEMS = (
+    ("extra espresso shot", "Extra Espresso Shot", 1.00),
+    ("extra shot", "Extra Espresso Shot", 1.00),
+    ("whipped cream", "Whipped Cream", 0.50),
+    ("flavor swirl", "Flavor Swirl", 0.75),
+)
+_COMBINED_NAME_RE = re.compile(r"\s+(?:with|plus|and|\+|&)\s+", re.IGNORECASE)
+
+
+def _rejected(reason: str, message: str, item_name: str, *, next_step: str,
+              suggested_calls: list[dict] | None = None) -> ToolResult:
+    """An update_order the guard refused. Sent to the model (never the browser)
+    as explicit JSON so it can't read the refusal as a success: at effort
+    "none" gpt-realtime-2.1 told guests "All set" after a plain-text refusal."""
+    payload: dict[str, Any] = {
+        "status": "rejected",
+        "item_added": False,
+        "item_name": item_name,
+        "reason": reason,
+        "message": message,
+        "instructions": "Nothing was added to the order. Do not tell the guest it was added or say 'all set'. " + next_step,
+    }
+    if suggested_calls:
+        payload["suggested_calls"] = suggested_calls
+    return ToolResult(json.dumps(payload, ensure_ascii=False), ToolResultDirection.TO_SERVER)
+
+
+def _split_combined_extra(item_name: str) -> tuple[str, str, float] | None:
+    """'Caramel Craze Latte with Extra Espresso Shot' -> ('Caramel Craze Latte',
+    'Extra Espresso Shot', 1.0). None when the name is just the extra."""
+    parts = _COMBINED_NAME_RE.split(item_name.strip(), maxsplit=1)
+    if len(parts) != 2:
+        return None
+    base, extra = (p.strip() for p in parts)
+    extra_lower = extra.lower()
+    for keyword, menu_name, price in EXTRA_MENU_ITEMS:
+        if keyword in extra_lower:
+            return base, menu_name, price
+    return None
 
 
 def _load_menu_category_map() -> dict[str, str]:
@@ -250,7 +293,7 @@ update_order_tool_schema = {
             },
             "item_name": { 
                 "type": "string", 
-                "description": "Name of the item to update, e.g., 'Cappuccino'."
+                "description": "Name of ONE menu item, e.g., 'Cappuccino'. Extras (whipped cream, flavor swirl, extra espresso shot) are separate items: add the drink first, then the extra with its own call. The result's status is 'ok' when the order changed and 'rejected' when nothing was added."
             },
             "size": { 
                 "type": "string", 
@@ -307,7 +350,8 @@ async def update_order(args, session_id: str) -> ToolResult:
                 )
             logger.info("Per-item limit hit for '%s' in session %s (requested %d, existing %d)",
                         item_name, session_id, quantity, existing_qty)
-            return ToolResult(msg, ToolResultDirection.TO_SERVER)
+            return _rejected("item_quantity_limit", msg, item_name,
+                             next_step="Tell the guest the limit and ask how many they'd like.")
 
         # Total order limit
         total_qty = sum(oi.quantity for oi in current_items) + quantity
@@ -326,7 +370,8 @@ async def update_order(args, session_id: str) -> ToolResult:
                     f"I can add {remaining} more — would you like me to do that?"
                 )
             logger.info("Total order limit hit in session %s (would be %d items)", session_id, total_qty)
-            return ToolResult(msg, ToolResultDirection.TO_SERVER)
+            return _rejected("order_item_limit", msg, item_name,
+                             next_step="Tell the guest the limit and ask what they'd like to do.")
 
         # Extras validation
         if _is_extra_item(item_name):
@@ -341,17 +386,38 @@ async def update_order(args, session_id: str) -> ToolResult:
                     has_blocked_base = True
 
             if not has_allowed_base:
-                apology = (
-                    "I can add extras to signature lattes or cold beverages, "
-                    "but not to donuts or breakfast sandwiches."
-                )
-                if has_blocked_base:
+                combined = _split_combined_extra(item_name)
+                base_category = _infer_category(combined[0]) if combined else ""
+                logger.info("Blocked extra '%s' for session %s", item_name, session_id)
+                if combined and base_category in ALLOWED_EXTRA_CATEGORIES:
+                    base, extra, extra_price = combined
+                    return _rejected(
+                        "extra_in_item_name",
+                        f"Extras are separate items: add the {base} first, then the {extra} as its own item.",
+                        item_name,
+                        next_step=("The guest already agreed to this order, so make the suggested_calls now "
+                                   "(use the drink's menu price per item), then confirm."),
+                        suggested_calls=[
+                            {"action": "add", "item_name": base, "size": size, "quantity": quantity},
+                            {"action": "add", "item_name": extra, "size": "Standard", "quantity": quantity,
+                             "price": extra_price},
+                        ],
+                    )
+                if has_blocked_base or base_category in BLOCKED_EXTRA_CATEGORIES:
                     apology = (
                         "I can add extras to signature lattes or cold beverages, "
                         "but I can't add them to donuts or breakfast sandwiches."
                     )
-                logger.info("Blocked extra '%s' for session %s", item_name, session_id)
-                return ToolResult(apology, ToolResultDirection.TO_SERVER)
+                else:
+                    apology = (
+                        "I can add extras to signature lattes or cold beverages, "
+                        "but not to donuts or breakfast sandwiches."
+                    )
+                return _rejected(
+                    "extra_without_drink", apology, item_name,
+                    next_step=("Tell the guest, and offer to add the extra to a signature latte or cold beverage "
+                               "(add that drink first, then the extra as its own item)."),
+                )
 
     order_state_singleton.handle_order_update(
         session_id,
@@ -366,7 +432,17 @@ async def update_order(args, session_id: str) -> ToolResult:
     json_order_summary = order_summary.model_dump_json()
     logger.debug("Session %s order summary after update: %s", session_id, json_order_summary)
 
-    return ToolResult(json_order_summary, ToolResultDirection.TO_CLIENT)
+    # The browser gets the full summary; the model gets an explicit success so
+    # it can tell an accepted call from a rejected one.
+    server_text = json.dumps({
+        "status": "ok",
+        "action": action,
+        "item_name": item_name,
+        "size": size,
+        "quantity": quantity,
+        "order_items": [oi.display or oi.item for oi in order_summary.items],
+    }, ensure_ascii=False)
+    return ToolResult(json_order_summary, ToolResultDirection.TO_CLIENT, server_text=server_text)
 
 
 get_order_tool_schema = {

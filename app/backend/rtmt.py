@@ -20,9 +20,9 @@ from order_state import SessionIdentifiers, order_state_singleton
 
 logger = logging.getLogger("coffee-chat")
 
-__all__ = ["RTMiddleTier", "RTToolCall", "Tool", "ToolResult", "ToolResultDirection",
-           "configure_realtime_model", "deployment_supports_reasoning", "normalize_reasoning_effort",
-           "parse_reasoning_model"]
+__all__ = ["RTMiddleTier", "RTToolCall", "RateLimitSettings", "Tool", "ToolResult", "ToolResultDirection",
+           "configure_realtime_model", "deployment_supports_reasoning", "is_rate_limit_error",
+           "normalize_reasoning_effort", "parse_reasoning_model", "parse_retry_hint"]
 
 
 # GA → legacy event name translation for client compatibility.
@@ -306,6 +306,8 @@ class _SessionUpdateGuard:
         self._payloads: dict[str, dict] = {}
         self._in_flight: deque[str] = deque()
         self._fallback_sent_for: set[str] = set()
+        # Result of the latest correlate() call.
+        self.last_correlated: str | None = None
 
     def stamp(self, message: dict, fallback_of: str | None = None) -> dict:
         """Ensure `message` carries an event_id and start tracking it."""
@@ -332,6 +334,10 @@ class _SessionUpdateGuard:
 
     def correlate(self, error_event: dict) -> str | None:
         """Return the event_id of our session.update this error rejects, or None."""
+        self.last_correlated = self._correlate(error_event)
+        return self.last_correlated
+
+    def _correlate(self, error_event: dict) -> str | None:
         err = error_event.get("error") or {}
         event_id = err.get("event_id")
         if event_id:
@@ -362,6 +368,141 @@ class _SessionUpdateGuard:
         return True
 
 
+# ── Rate-limit recovery ────────────────────────────────────────────────────
+# The demos share Azure OpenAI quota. A rate-limited response produces no
+# output, so without this the guest just hears silence.
+
+_RETRY_HINT_RE = re.compile(
+    r"(?:try\s+again|retry)\s+(?:in|after)\s+(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|secs?|seconds?)\b",
+    re.IGNORECASE)
+_FIRST_RETRY_CLAMP = (0.5, 5.0)
+_SECOND_RETRY_CLAMP = (2.0, 8.0)
+
+
+def parse_retry_hint(message: Any) -> float | None:
+    """Seconds from "try again in 2.5s" / "retry after 800 ms"; None if absent."""
+    match = _RETRY_HINT_RE.search(message) if isinstance(message, str) else None
+    if match is None:
+        return None
+    value = float(match.group(1))
+    return value / 1000.0 if match.group(2).lower().startswith("m") else value
+
+
+def is_rate_limit_error(error: Any) -> bool:
+    if not isinstance(error, dict):
+        return False
+    return any("rate_limit" in str(error.get(key) or "").lower() for key in ("code", "type"))
+
+
+def _clamp(value: float, bounds: tuple[float, float]) -> float:
+    return min(max(value, bounds[0]), bounds[1])
+
+
+class RateLimitSettings:
+    def __init__(self, enabled: bool = True, retry_delay: float = 1.5, second_retry_delay: float = 4.0,
+                 max_retries: int = 2) -> None:
+        self.enabled = enabled
+        self.retry_delay = retry_delay
+        self.second_retry_delay = second_retry_delay
+        self.max_retries = max_retries
+
+    @classmethod
+    def from_config(cls, cfg: dict | None, environ: Any = None) -> "RateLimitSettings":
+        """`resilience.rate_limit` from config.yaml; RATE_LIMIT_RECOVERY_ENABLED overrides `enabled`."""
+        env = os.environ if environ is None else environ
+        cfg = cfg or {}
+        enabled = bool(cfg.get("enabled", True))
+        override = (env.get("RATE_LIMIT_RECOVERY_ENABLED") or "").strip().lower()
+        if override:
+            enabled = override in {"1", "true", "yes", "on"}
+        return cls(enabled=enabled,
+                   retry_delay=float(cfg.get("retry_delay_seconds", 1.5)),
+                   second_retry_delay=float(cfg.get("second_retry_delay_seconds", 4)),
+                   max_retries=int(cfg.get("max_retries", 2)))
+
+
+class _RateLimitRecovery:
+    """Retry ladder for ONE upstream socket, per failed response:
+
+    1st rate-limited failure -> silent `response.create` after `retry_delay`
+    2nd -> browser `extension.rate_limited` attempt 1 (apology clip) + retry 2
+    3rd -> browser `extension.rate_limited` final; no more retries.
+
+    A pending retry is dropped if the guest starts speaking or another response
+    starts: VAD creates a fresh response, and a stale one must not stack on it.
+    Only `response.create` is resent, never a tool call, so a tool follow-up
+    that is retried doesn't run the tool again.
+    """
+
+    def __init__(self, settings: RateLimitSettings, sleep: Callable[[float], Any] = asyncio.sleep,
+                 session_id: str | None = None) -> None:
+        self.settings = settings
+        self._sleep = sleep
+        self._session_id = session_id
+        self.failures = 0
+        self._retry: asyncio.Task | None = None
+
+    @property
+    def retry_pending(self) -> bool:
+        return self._retry is not None and not self._retry.done()
+
+    def cancel(self, reason: str) -> bool:
+        """Drop a pending retry; True if one was pending."""
+        if not self.retry_pending:
+            return False
+        self._retry.cancel()
+        self._retry = None
+        logger.info("Rate-limit retry cancelled: %s (session=%s)", reason, self._session_id)
+        return True
+
+    def on_guest_speech(self) -> None:
+        self.cancel("guest started speaking")
+        self.failures = 0
+
+    def on_response_created(self) -> None:
+        # Our own retry's response.created arrives after the retry was sent, so
+        # a still-pending retry means someone else (VAD) started this response.
+        if self.cancel("a new response started"):
+            self.failures = 0
+
+    def on_response_finished(self) -> None:
+        self.failures = 0
+
+    async def on_rate_limited(self, error: dict, server_ws, client_ws) -> None:
+        self.cancel("superseded by a new rate-limit failure")
+        self.failures += 1
+        attempt = self.failures
+        hint = parse_retry_hint(error.get("message"))
+        logger.warning("Response rate-limited (failure %d/%d): code=%s type=%s retry_hint=%s message=%s (session=%s)",
+                       attempt, self.settings.max_retries + 1, error.get("code"), error.get("type"),
+                       f"{hint:g}s" if hint is not None else None, error.get("message"), self._session_id)
+        if attempt > self.settings.max_retries:
+            logger.warning("Rate-limit retries exhausted; asking the guest to repeat (session=%s)", self._session_id)
+            self.failures = 0
+            await self._notify(client_ws, {"type": "extension.rate_limited", "attempt": self.settings.max_retries,
+                                           "final": True})
+            return
+        if attempt == 1:
+            delay = _clamp(hint, _FIRST_RETRY_CLAMP) if hint is not None else self.settings.retry_delay
+        else:
+            await self._notify(client_ws, {"type": "extension.rate_limited", "attempt": attempt - 1})
+            delay = _clamp(hint, _SECOND_RETRY_CLAMP) if hint is not None else self.settings.second_retry_delay
+        self._retry = asyncio.ensure_future(self._retry_after(delay, server_ws, attempt))
+
+    @staticmethod
+    async def _notify(client_ws, event: dict) -> None:
+        if getattr(client_ws, "closed", False) is not True:
+            await client_ws.send_json(event)
+
+    async def _retry_after(self, delay: float, server_ws, attempt: int) -> None:
+        await self._sleep(delay)
+        if getattr(server_ws, "closed", False) is True:
+            return
+        logger.warning("Retrying rate-limited response (retry %d after %.2fs, session=%s)",
+                       attempt, delay, self._session_id)
+        await server_ws.send_json({"type": "response.create"})
+
+
 class ToolResultDirection(Enum):
     TO_SERVER = 1
     TO_CLIENT = 2
@@ -369,15 +510,24 @@ class ToolResultDirection(Enum):
 class ToolResult:
     text: str
     destination: ToolResultDirection
+    server_text: str | None
 
-    def __init__(self, text: str, destination: ToolResultDirection):
+    def __init__(self, text: str, destination: ToolResultDirection, server_text: str | None = None):
         self.text = text
         self.destination = destination
+        # What the model sees for a TO_CLIENT result (the browser gets `text`).
+        self.server_text = server_text
 
     def to_text(self) -> str:
         if self.text is None:
             return ""
         return self.text if isinstance(self.text, str) else json.dumps(self.text)
+
+    def model_output(self) -> str:
+        """The function_call_output sent back to the model."""
+        if self.destination == ToolResultDirection.TO_SERVER:
+            return self.to_text()
+        return self.server_text or ""
 
 class Tool:
     target: Callable[..., ToolResult]
@@ -433,6 +583,10 @@ class RTMiddleTier:
         # Flipped if the deployment rejects `reasoning` at runtime despite the
         # name check / switch; from then on it is never sent again.
         self._reasoning_rejected = False
+        # Rate-limit retry ladder (config.yaml resilience.rate_limit); `_sleep`
+        # is injectable so tests don't really wait.
+        self.rate_limit = RateLimitSettings()
+        self._sleep: Callable[[float], Any] = asyncio.sleep
         if voice_choice is not None:
             logger.info("Realtime voice choice set to %s", voice_choice)
         if isinstance(credentials, AzureKeyCredential):
@@ -584,7 +738,12 @@ class RTMiddleTier:
             }
         )
 
-    async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse, tools_pending: dict[str, "RTToolCall"], guard: "_SessionUpdateGuard | None" = None) -> str | None:
+    def new_rate_limit_recovery(self, session_id: str | None = None) -> "_RateLimitRecovery | None":
+        if not self.rate_limit.enabled:
+            return None
+        return _RateLimitRecovery(self.rate_limit, sleep=self._sleep, session_id=session_id)
+
+    async def _process_message_to_client(self, msg: str, client_ws: web.WebSocketResponse, server_ws: web.WebSocketResponse, tools_pending: dict[str, "RTToolCall"], guard: "_SessionUpdateGuard | None" = None, recovery: "_RateLimitRecovery | None" = None) -> str | None:
         data = msg.data
 
         # FAST PATH: extract type via regex without full JSON parse.
@@ -593,6 +752,8 @@ class RTMiddleTier:
         if m is not None and m.group(1) in _PASSTHROUGH_SERVER_TYPES:
             # Translate GA event names to legacy names for client compatibility
             event_type = m.group(1)
+            if recovery is not None and event_type == "input_audio_buffer.speech_started":
+                recovery.on_guest_speech()
             legacy_name = _GA_TO_LEGACY_EVENTS.get(event_type)
             if legacy_name is not None:
                 data = data.replace(f'"{event_type}"', f'"{legacy_name}"', 1)
@@ -608,7 +769,15 @@ class RTMiddleTier:
                     # fallback) instead of surfacing as a user-facing failure.
                     if await self._recover_rejected_session_update(message, server_ws, guard, session_id):
                         return None
+                    correlated = guard is not None and guard.last_correlated is not None
+                    if recovery is not None and not correlated and is_rate_limit_error(message.get("error")):
+                        await recovery.on_rate_limited(message.get("error") or {}, server_ws, client_ws)
+                        return None
                     logger.error("OpenAI Realtime API error: %s", json.dumps(message, default=str)[:1000])
+
+                case "response.created":
+                    if recovery is not None:
+                        recovery.on_response_created()
 
                 case "conversation.item.input_audio_transcription.failed":
                     # e.g. DeploymentNotFound when the configured transcription
@@ -680,7 +849,7 @@ class RTMiddleTier:
                                     "item": {
                                         "type": "function_call_output",
                                         "call_id": item["call_id"],
-                                        "output": result.to_text() if result.destination == ToolResultDirection.TO_SERVER else ""
+                                        "output": result.model_output()
                                     }
                                 })
                                 if result.destination == ToolResultDirection.TO_CLIENT:
@@ -693,6 +862,16 @@ class RTMiddleTier:
                                 updated_message = None
 
                 case "response.done":
+                    response = message.get("response") or {}
+                    failure = (response.get("status_details") or {}).get("error") \
+                        if response.get("status") == "failed" else None
+                    if recovery is not None and is_rate_limit_error(failure):
+                        # No output was produced; any tool outputs are already in
+                        # the conversation, so the retry alone is the follow-up.
+                        tools_pending.clear()
+                        await recovery.on_rate_limited(failure, server_ws, client_ws)
+                    elif recovery is not None:
+                        recovery.on_response_finished()
                     if tools_pending:
                         tools_pending.clear()
                         await server_ws.send_json({
@@ -765,6 +944,7 @@ class RTMiddleTier:
                 assistant_audio_seen = False
                 session_configured = asyncio.Event()
                 guard = _SessionUpdateGuard()
+                recovery = self.new_rate_limit_recovery(session_id)
 
                 # Configure the upstream session before relaying a single
                 # browser frame, so no socket ever runs on service defaults.
@@ -849,7 +1029,8 @@ class RTMiddleTier:
                             elif _MARKER_SESSION_UPDATED in data:
                                 guard.on_session_updated()
                                 session_configured.set()
-                            new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending, guard)
+                            new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending, guard,
+                                                                            recovery)
                             if new_msg is not None:
                                 if ws.closed:
                                     break
@@ -866,6 +1047,8 @@ class RTMiddleTier:
                 except Exception:
                     logger.exception("Unexpected error in realtime message forwarding")
                 finally:
+                    if recovery is not None:
+                        recovery.cancel("connection closed")
                     if session_id is not None:
                         order_state_singleton.delete_session(session_id)
                         self._sent_greeting.discard(session_id)

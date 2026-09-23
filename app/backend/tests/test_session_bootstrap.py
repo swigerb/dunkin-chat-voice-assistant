@@ -860,6 +860,22 @@ class ReasoningAndTranscriptionConfigTests(unittest.TestCase):
         self.assertNotIn("reasoning", on_15)
         self.assertNotIn("parallel_tool_calls", on_15)
 
+    def test_datazone_deployment_name_is_a_reasoning_model(self):
+        """Dunkin runs on `gpt-realtime-2.1-dz` (DataZoneStandard). With the shipped
+        `reasoning_model: auto` the name check alone must send `reasoning`; a
+        suffixed 1.5 rollback must still not."""
+        import yaml
+
+        from rtmt import configure_realtime_model, deployment_supports_reasoning
+        model_cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "config.yaml")
+                                   .read_text(encoding="utf-8"))["model"]
+        self.assertTrue(deployment_supports_reasoning("gpt-realtime-2.1-dz"))
+        rtmt = configure_realtime_model(self._rtmt("gpt-realtime-2.1-dz"), model_cfg, environ={})
+        self.assertTrue(rtmt.reasoning_enabled())
+        self.assertEqual(self._bootstrap(rtmt)["reasoning"], {"effort": "low"})
+        rollback = configure_realtime_model(self._rtmt("gpt-realtime-1.5-dz"), model_cfg, environ={})
+        self.assertNotIn("reasoning", self._bootstrap(rollback))
+
 
 class BuildSessionTests(unittest.TestCase):
 

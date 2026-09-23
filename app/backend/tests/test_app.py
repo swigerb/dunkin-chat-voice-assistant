@@ -103,6 +103,16 @@ class CreateAppConfigTests(unittest.IsolatedAsyncioTestCase):
         _, kwargs = mock_cls.call_args
         self.assertEqual(kwargs["voice_choice"], "marin")
 
+    async def test_rate_limit_recovery_comes_from_config_yaml(self):
+        _, mock_instance = await self._run_create_app({"RATE_LIMIT_RECOVERY_ENABLED": ""})
+        settings = mock_instance.rate_limit
+        self.assertEqual((settings.enabled, settings.retry_delay, settings.second_retry_delay, settings.max_retries),
+                         (True, 1.5, 4.0, 2))
+
+    async def test_rate_limit_recovery_env_override(self):
+        _, mock_instance = await self._run_create_app({"RATE_LIMIT_RECOVERY_ENABLED": "false"})
+        self.assertFalse(mock_instance.rate_limit.enabled)
+
     async def test_default_voice_comes_from_config_yaml(self):
         with patch("app.get_config", return_value={"model": {"default_voice": "cedar"}}):
             mock_cls, _ = await self._run_create_app()

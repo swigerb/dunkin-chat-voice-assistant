@@ -1,16 +1,18 @@
 {
     "app": {
-        "title": "Habla con tus datos",
-        "footer": "Creado con Azure AI Search + Azure OpenAI",
+        "title": "Dunkin' Voice Crew",
+        "footer": "Creado con Azure AI, Azure OpenAI y Azure Speech",
         "showTranscript": "Mostrar transcripción",
         "stopRecording": "Detener grabación",
         "startRecording": "Comenzar grabación",
         "stopConversation": "Detener conversación"
     },
     "status": {
-        "notRecordingMessage": "Pregunta cualquier cosa sobre los beneficios de los empleados de Contoso",
+        "notRecordingMessage": "¡Pidamos un café!",
         "conversationInProgress": "Conversación en progreso",
-        "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido."
+        "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido.",
+        "rateLimitRetrying": "Perdón, dame un segundito…",
+        "rateLimitFinal": "Estamos un poco ocupados. ¿Puedes repetirlo, por favor?"
     },
     "history": {
         "transcriptHistory": "Historial de transcripciones",
@@ -19,5 +21,8 @@
     "groundingFiles": {
         "title": "Archivos de fundamentación",
         "description": "Archivos utilizados para fundamentar las respuestas."
+    },
+    "menu": {
+        "title": "Menú"
     }
 }

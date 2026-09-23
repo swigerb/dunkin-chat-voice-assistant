@@ -67,3 +67,12 @@
 
 - Survivors in the first rounds (items 1, 2, 3, 4, 5, 6) were fixed by tightening tests, never by weakening them. Every re-run was killed.
 - A parse-error "kill" does not count: re-ran that mutant as a valid `pass` (killed).
+
+## Round 3 (2026-09-23)
+- Mutation checks, all killed: dz 2/2, R3 6/6, D2 10/10, D1 16/16, R1 backend 34/34, R1 frontend 26/26 (94 total).
+- Survivors that became tests or cleanups:
+  - D2: redundant regex lookbehind removed.
+  - D1: redundant article group and `_is_extra_item` check removed.
+  - R1 backend: final-notice reset; incomplete ≠ failed; second-delay config; end-to-end test through `_forward_messages`.
+  - R1 frontend: blocked autoplay; overlapping clips; stop-conversation cleanup; locale not copied from en.
+- Counts: backend 252 → 301, frontend 31 → 61.

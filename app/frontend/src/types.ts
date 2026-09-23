@@ -98,3 +98,10 @@ export type ExtensionRoundTripToken = {
     roundTripIndex: number;
     roundTripToken: string;
 };
+
+/** The middle tier's rate-limit ladder: attempt 1 = retrying (play the apology clip), final = gave up. */
+export type ExtensionRateLimited = {
+    type: "extension.rate_limited";
+    attempt: number;
+    final?: boolean;
+};
