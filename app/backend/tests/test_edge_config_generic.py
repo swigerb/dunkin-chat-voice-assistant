@@ -6,6 +6,7 @@ cluster at somebody else's resource. Operator values are placeholders
 (`<your-...>` in flux/, `${VAR}` rendered by the deploy scripts in k8s/).
 """
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -61,6 +62,33 @@ class EdgeConfigIsGenericTests(unittest.TestCase):
         data = yaml.safe_load((REPO / "flux/apps/dunkin-voice/configmap.yaml").read_text(encoding="utf-8"))["data"]
         self.assertEqual(data["AZURE_OPENAI_EASTUS2_ENDPOINT"], "https://<your-aoai-account>.openai.azure.com/")
         self.assertTrue(data["AZURE_OPENAI_REALTIME_DEPLOYMENT"])
+
+    def test_env_template_covers_deploy_scripts_with_blank_values(self):
+        """.env.template (referenced by the edge doc and both deploy scripts) lists every
+        variable the scripts require, and ships no values: operators fill in their own."""
+        template = REPO / ".env.template"
+        self.assertTrue(template.is_file(), ".env.template is missing (is it git-ignored?)")
+        text = template.read_text(encoding="utf-8")
+        assignments = dict(line.split("=", 1) for line in text.splitlines()
+                           if line.strip() and not line.lstrip().startswith("#"))
+        sh = (REPO / "scripts/deploy-edge.sh").read_text(encoding="utf-8")
+        required = re.search(r"REQUIRED_VARS=\(([^)]*)\)", sh).group(1).split()
+        self.assertGreaterEqual(len(required), 7)
+        for name in required:
+            self.assertIn(name, assignments)
+        self.assertEqual({k: v for k, v in assignments.items() if v.strip()}, {})
+        self.assertEqual(_offending_aoai_hosts(text, {"your-aoai-account"}), [])
+        self.assertEqual(GUID_RE.findall(text), [])
+
+    def test_env_template_is_not_git_ignored(self):
+        """`.env.*` is ignored (real .env files hold keys); the template must still be tracked."""
+        try:
+            r = subprocess.run(["git", "check-ignore", "-q", ".env.template"], cwd=REPO, capture_output=True)
+        except OSError:
+            self.skipTest("git not available")
+        if r.returncode == 128:
+            self.skipTest("not a git checkout")
+        self.assertEqual(r.returncode, 1, ".env.template is git-ignored")
 
     def test_host_check_is_not_vacuous(self):
         self.assertEqual(_offending_aoai_hosts('ENDPOINT: "wss://someone-else.openai.azure.com/"'),
