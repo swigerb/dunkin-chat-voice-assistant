@@ -79,6 +79,13 @@ resume:
   # A resume is honoured only as the socket's first frame; if nothing arrives
   # within this many seconds the socket is announced as a fresh session.
   first_frame_timeout_seconds: 2
+  # A resume mid-conversation briefs the new upstream with the order and the
+  # last few turns (no greeting). Turns kept, and their total characters:
+  history_turns: 6
+  history_chars: 2000
+  # If the guest stays silent this long after such a resume, the crew member
+  # asks once whether they need anything else. 0 disables the nudge.
+  nudge_after_seconds: 30
 
 resilience:
   # When a model response is rate-limited (shared Azure OpenAI quota), retry it

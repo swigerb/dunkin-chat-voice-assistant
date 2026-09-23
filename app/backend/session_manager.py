@@ -24,10 +24,11 @@ does not use this module.
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import time
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -61,6 +62,22 @@ SESSION_ENDED_CLOSE_REASON = "session_ended"
 # Resume ids are secrets.token_urlsafe(32): 43 chars. Anything far outside that is malformed.
 _RESUME_ID_MIN_LEN = 32
 _RESUME_ID_MAX_LEN = 128
+
+# Sent to the new upstream once, when a session is resumed mid-conversation.
+_REHYDRATION_PREAMBLE = (
+    "[Connection restored] The guest's connection dropped for a moment and is back. This is the SAME "
+    "guest continuing the SAME order. Do NOT greet them again, do not welcome them back, do not "
+    "mention the connection, and do not speak until the guest speaks. Then carry on exactly where "
+    "the conversation left off. The current order below is authoritative; use get_order if you need "
+    "it again and update_order for any change."
+)
+
+# Sent once, if the guest stays silent for resume.nudge_after_seconds after a resume.
+_NUDGE_TEXT = (
+    "The guest has been quiet since their connection came back. In one short, friendly sentence, "
+    "as the Dunkin' crew member, ask whether they need anything else with their order. Do not greet "
+    "them again, do not mention the connection, and do not read the order back."
+)
 
 
 def _resume_digest(resume_id: str) -> str:
@@ -103,6 +120,8 @@ class SessionManager:
         # Resume credentials are stored only as sha256 digests.
         self._resume_digests: dict[str, str] = {}   # session_id -> digest
         self._resume_index: dict[str, str] = {}     # digest -> session_id
+        # session_id -> the last few (role, text) turns, for rehydrating a resume.
+        self._transcripts: dict[str, deque[tuple[str, str]]] = {}
         self._idle_check_task: asyncio.Task | None = None
         self._clock: Callable[[], float] = clock or time.monotonic
 
@@ -113,6 +132,9 @@ class SessionManager:
         self.grace_seconds = float(_resume_cfg.get("grace_seconds", 120))
         self.max_detached = int(_resume_cfg.get("max_detached", 20))
         self.first_frame_timeout_seconds = float(_resume_cfg.get("first_frame_timeout_seconds", 2.0))
+        self.history_turns = int(_resume_cfg.get("history_turns", 6))
+        self.history_chars = int(_resume_cfg.get("history_chars", 2000))
+        self.nudge_after_seconds = float(_resume_cfg.get("nudge_after_seconds", 30))
 
     @property
     def active_session_count(self) -> int:
@@ -169,6 +191,7 @@ class SessionManager:
         order_state_singleton.delete_session(session_id)
         self._sent_greeting.discard(session_id)
         self._last_activity.pop(session_id, None)
+        self._transcripts.pop(session_id, None)
         logger.info("Session %s ended (%s)", session_id, reason)
 
     def detached_expires_at(self, session_id: str) -> float | None:
@@ -208,6 +231,56 @@ class SessionManager:
         while len(self._detached) > max(self.max_detached, 0):
             oldest = next(iter(self._detached))
             self.end_session(oldest, "evicted: resume.max_detached reached")
+
+    # ── Transcript ring buffer and rehydration ──
+
+    def record_turn(self, session_id: str | None, role: str, text: str | None) -> None:
+        """Keep the last resume.history_turns turns ("guest" / "crew") for rehydration."""
+        if session_id is None or self.history_turns <= 0 or session_id not in order_state_singleton.sessions:
+            return
+        text = (text or "").strip()
+        if not text:
+            return
+        turns = self._transcripts.get(session_id)
+        if turns is None or turns.maxlen != self.history_turns:
+            turns = deque(turns or (), maxlen=self.history_turns)
+            self._transcripts[session_id] = turns
+        turns.append((role, text[: max(self.history_chars, 0)]))
+
+    def recent_turns(self, session_id: str) -> list[tuple[str, str]]:
+        """The buffered turns, oldest first, capped at resume.history_chars in total (newest kept)."""
+        budget = max(self.history_chars, 0)
+        kept: list[tuple[str, str]] = []
+        for role, text in reversed(self._transcripts.get(session_id, ())):
+            if budget <= 0:
+                break
+            if len(text) > budget:
+                text = "\u2026" + text[len(text) - budget + 1:]
+            kept.append((role, text))
+            budget -= len(text)
+        kept.reverse()
+        return kept
+
+    def build_rehydration_item(self, session_id: str) -> str:
+        """One system conversation.item.create carrying the order and the recent turns."""
+        order_json = order_state_singleton.get_order_summary(session_id).model_dump_json()
+        turns = self.recent_turns(session_id)
+        history = "\n".join(f"{'Guest' if role == 'guest' else 'Crew'}: {text}" for role, text in turns)
+        text = (f"{_REHYDRATION_PREAMBLE}\n\nCurrent order (JSON): {order_json}\n\n"
+                f"Recent conversation (oldest first):\n{history or '(none recorded)'}")
+        return json.dumps({
+            "type": "conversation.item.create",
+            "item": {"type": "message", "role": "system", "content": [{"type": "input_text", "text": text}]},
+        })
+
+    @staticmethod
+    def build_nudge_item() -> str:
+        return json.dumps({
+            "type": "conversation.item.create",
+            "item": {"type": "message", "role": "system", "content": [{"type": "input_text", "text": _NUDGE_TEXT}]},
+        })
+
+    # ── Resume credential ──
 
     def issue_resume_id(self, session_id: str | None) -> str | None:
         """Mint a fresh 256-bit resume id for the session, invalidating any previous

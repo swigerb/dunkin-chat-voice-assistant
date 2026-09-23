@@ -180,6 +180,7 @@ _MARKER_SPEECH_STARTED = '"input_audio_buffer.speech_started"'
 _MARKER_TRANSCRIPTION_COMPLETED = '"conversation.item.input_audio_transcription.completed"'
 _MARKER_RESUME = '"extension.resume"'
 _MARKER_END_SESSION = '"extension.end_session"'
+_MARKER_RESPONSE_CREATE = '"response.create"'
 
 # Fire-and-forget tasks (e.g. closing a superseded socket) kept alive until done.
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
@@ -952,6 +953,14 @@ class RTMiddleTier:
                             logging.error(f"Error processing message: {e}")
                         if replace:
                             updated_message = json.dumps(message)
+                    # Remember what the crew member said, for rehydrating a resumed session.
+                    if session_id is not None and "response" in message:
+                        spoken = " ".join(
+                            (content.get("transcript") or content.get("text") or "").strip()
+                            for out_item in message["response"].get("output") or []
+                            if out_item.get("type") == "message"
+                            for content in out_item.get("content") or [])
+                        self._sessions.record_turn(session_id, "crew", spoken)
                     if session_id is not None:
                         identifiers = order_state_singleton.advance_round_trip(session_id)
                         await self._emit_session_identifiers(client_ws, "extension.round_trip_token", identifiers)
@@ -1018,6 +1027,8 @@ class RTMiddleTier:
                 resume_decided = asyncio.Event()
                 upstream_created = False
                 announced = False
+                # Silent-guest nudge after a mid-conversation resume (once per resume).
+                nudge_task: asyncio.Task | None = None
 
                 # Configure the upstream session before relaying a single
                 # browser frame, so no socket ever runs on service defaults.
@@ -1071,8 +1082,31 @@ class RTMiddleTier:
                         resume_decided.set()
                         await announce_fresh()
 
+                async def nudge_after_silence():
+                    """If the guest says nothing for nudge_after_seconds after a resume, have
+                    the crew member ask once whether they need anything else. Waits for the
+                    same session.updated confirmation as the greeting. Not guest activity."""
+                    await asyncio.sleep(self._sessions.nudge_after_seconds)
+                    await session_configured.wait()
+                    if recovery is not None and recovery.retry_pending:
+                        # A rate-limited response is about to be retried; a nudge now
+                        # would stack a second response on top of it.
+                        logger.info("Resume nudge skipped: a rate-limit retry is pending (session=%s)", session_id)
+                        return
+                    logger.info("Guest silent %.0fs after resume; crew nudges (session=%s)",
+                                self._sessions.nudge_after_seconds, session_id)
+                    await target_ws.send_str(self._sessions.build_nudge_item())
+                    await target_ws.send_json({"type": "response.create"})
+
+                def cancel_nudge(reason: str) -> None:
+                    nonlocal nudge_task
+                    if nudge_task is not None and not nudge_task.done():
+                        nudge_task.cancel()
+                        logger.info("Resume nudge cancelled: %s (session=%s)", reason, session_id)
+                    nudge_task = None
+
                 async def handle_resume(data: str):
-                    nonlocal session_id, announced
+                    nonlocal session_id, announced, greeting_sent, nudge_task
                     presented = _presented_resume_id(data)
                     outcome = self._sessions.resume(ws, presented)
                     resume_decided.set()
@@ -1097,6 +1131,17 @@ class RTMiddleTier:
                         "round_trip_token": identifiers.round_trip_token,
                         "resume_id": outcome.resume_id,
                     })
+                    if not outcome.conversation_started:
+                        return                  # never greeted: the normal greeting still runs
+                    # Mid-conversation: no greeting, no "welcome back". Brief the new
+                    # upstream (after the bootstrap session.update, before any
+                    # response.create) and stay silent until the guest speaks.
+                    greeting_sent = True
+                    await target_ws.send_str(self._sessions.build_rehydration_item(session_id))
+                    logger.info("Resumed session %s rehydrated (%d recent turns); greeting suppressed",
+                                session_id, len(self._sessions.recent_turns(session_id)))
+                    if self._sessions.nudge_after_seconds > 0:
+                        nudge_task = asyncio.ensure_future(nudge_after_silence())
 
                 async def reject_late_resume(data: str):
                     nonlocal announced
@@ -1135,6 +1180,8 @@ class RTMiddleTier:
                             # from upstream), and so does any control frame (a tap).
                             if _MARKER_AUDIO_APPEND not in msg.data:
                                 self._sessions.touch_activity(session_id)
+                                if _MARKER_RESPONSE_CREATE in msg.data:
+                                    cancel_nudge("guest-initiated response")
                             # Intercept extension.set_voice — don't forward to OpenAI
                             if _MARKER_SET_VOICE in msg.data:
                                 try:
@@ -1185,8 +1232,16 @@ class RTMiddleTier:
                             elif _MARKER_SESSION_UPDATED in data:
                                 guard.on_session_updated()
                                 session_configured.set()
-                            elif _MARKER_SPEECH_STARTED in data or _MARKER_TRANSCRIPTION_COMPLETED in data:
+                            elif _MARKER_SPEECH_STARTED in data:
                                 self._sessions.touch_activity(session_id)
+                                cancel_nudge("guest speech")
+                            elif _MARKER_TRANSCRIPTION_COMPLETED in data:
+                                self._sessions.touch_activity(session_id)
+                                cancel_nudge("guest transcript")
+                                try:
+                                    self._sessions.record_turn(session_id, "guest", json.loads(data).get("transcript"))
+                                except (ValueError, AttributeError):
+                                    pass
                             new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending, guard,
                                                                             recovery, on_session_created=on_session_created)
                             if new_msg is not None:
@@ -1207,6 +1262,7 @@ class RTMiddleTier:
                     logger.exception("Unexpected error in realtime message forwarding")
                 finally:
                     deadline_task.cancel()
+                    cancel_nudge("socket closed")
                     if recovery is not None:
                         recovery.cancel("connection closed")
                     self._sessions.detach_session(ws, session_id, reason=f"client close code={ws.close_code}")

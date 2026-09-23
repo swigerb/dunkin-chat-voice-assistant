@@ -43,6 +43,8 @@ class ScriptedUpstream:
         self.connections: list[list[dict]] = []
         self.sockets: list[web.WebSocketResponse] = []
         self.rate_limit_next = 0
+        # False: session.update is not acknowledged (the test pushes session.updated).
+        self.ack_session_update = True
         self.connected = asyncio.Event()
 
     def app(self) -> web.Application:
@@ -65,7 +67,7 @@ class ScriptedUpstream:
             event = json.loads(msg.data)
             frames.append(event)
             kind = event.get("type")
-            if kind == "session.update":
+            if kind == "session.update" and self.ack_session_update:
                 await ws.send_json({"type": "session.updated", "session": {"type": "realtime"}})
             elif kind == "response.create":
                 n += 1

@@ -1,6 +1,7 @@
 """Order resume: the grace hold after a transport drop, the resume handshake,
 rehydration of the new upstream, and the silent-guest nudge."""
 import asyncio
+import json
 import logging
 import re
 import sys
@@ -506,6 +507,251 @@ class MiddleTierResumeTests(unittest.IsolatedAsyncioTestCase):
             for rid in (meta["resumeId"], resumed["resume_id"]):
                 self.assertNotIn(rid, text)
             self.assertIsNotNone(re.search(resume_id_fingerprint(meta["resumeId"]), text))
+            h.sessions.end_session(sid)
+
+
+class TranscriptRingTests(unittest.TestCase):
+
+    def setUp(self):
+        self.sm = SessionManager(clock=FakeClock())
+        self.sid = self.sm.create_session(fake_ws())
+
+    def tearDown(self):
+        self.sm.end_session(self.sid)
+
+    def test_config_ships_the_decided_history_and_nudge(self):
+        cfg = get_config()["resume"]
+        self.assertEqual((cfg["history_turns"], cfg["history_chars"], cfg["nudge_after_seconds"]), (6, 2000, 30))
+        self.assertEqual((self.sm.history_turns, self.sm.history_chars, self.sm.nudge_after_seconds), (6, 2000, 30.0))
+        import session_manager
+        with unittest.mock.patch.object(session_manager, "_resume_cfg", {}):
+            sm = SessionManager()
+        self.assertEqual((sm.history_turns, sm.history_chars, sm.nudge_after_seconds), (6, 2000, 30.0))
+
+    def test_keeps_only_the_last_history_turns(self):
+        self.sm.history_turns = 3
+        for i in range(5):
+            self.sm.record_turn(self.sid, "guest", f"turn {i}")
+        self.assertEqual(self.sm.recent_turns(self.sid), [("guest", "turn 2"), ("guest", "turn 3"), ("guest", "turn 4")])
+
+    def test_ignores_blank_text_unknown_sessions_and_a_zero_history(self):
+        for sid, text in ((self.sid, "  "), (self.sid, None), (None, "hi"), ("no-such-session", "hi")):
+            self.sm.record_turn(sid, "guest", text)
+        self.assertEqual(self.sm.recent_turns(self.sid), [])
+        self.assertEqual(list(self.sm._transcripts), [], "nothing kept for unknown sessions")
+        for turns in (0, -1):
+            self.sm.history_turns = turns
+            self.sm.record_turn(self.sid, "guest", "hello")
+            self.assertEqual(self.sm.recent_turns(self.sid), [])
+
+    def test_text_is_stripped_and_each_turn_capped(self):
+        self.sm.history_chars = 5
+        self.sm.record_turn(self.sid, "crew", "  abcdefgh  ")
+        self.assertEqual(self.sm.recent_turns(self.sid), [("crew", "abcde")])
+
+    def test_the_character_budget_keeps_the_newest_text(self):
+        self.sm.history_chars = 10
+        self.sm.record_turn(self.sid, "guest", "old turn")
+        self.sm.record_turn(self.sid, "guest", "aaaa")
+        self.sm.record_turn(self.sid, "crew", "bbbbbbbb")
+        self.assertEqual(self.sm.recent_turns(self.sid), [("guest", "\u2026a"), ("crew", "bbbbbbbb")])
+
+    def test_rehydration_item_carries_order_and_turns_as_a_system_message(self):
+        add_item(self.sid, "Iced Coffee")
+        self.sm.record_turn(self.sid, "guest", "An iced coffee please")
+        self.sm.record_turn(self.sid, "crew", "Coming right up.")
+        event = json.loads(self.sm.build_rehydration_item(self.sid))
+        self.assertEqual(event["type"], "conversation.item.create")
+        self.assertEqual((event["item"]["type"], event["item"]["role"]), ("message", "system"))
+        text = event["item"]["content"][0]["text"]
+        self.assertEqual(event["item"]["content"][0]["type"], "input_text")
+        self.assertIn("Do NOT greet", text)
+        self.assertIn('"item":"Iced Coffee"', text)
+        self.assertIn("Guest: An iced coffee please\nCrew: Coming right up.", text)
+
+    def test_rehydration_without_turns_says_so(self):
+        text = json.loads(self.sm.build_rehydration_item(self.sid))["item"]["content"][0]["text"]
+        self.assertIn("(none recorded)", text)
+
+    def test_nudge_item_is_a_system_message(self):
+        event = json.loads(SessionManager.build_nudge_item())
+        self.assertEqual((event["type"], event["item"]["role"]), ("conversation.item.create", "system"))
+        self.assertIn("anything else", event["item"]["content"][0]["text"])
+
+    def test_ending_a_session_forgets_its_turns(self):
+        sid = self.sm.create_session(fake_ws())
+        self.sm.record_turn(sid, "guest", "hello")
+        self.sm.end_session(sid)
+        self.assertNotIn(sid, self.sm._transcripts)
+
+
+GUEST_SAID = {"type": "conversation.item.input_audio_transcription.completed", "item_id": "i1",
+              "content_index": 0, "transcript": "A medium iced coffee please"}
+CREW_SAID = {"type": "response.done", "response": {"id": "r_t", "status": "completed", "output": [
+    {"type": "message", "role": "assistant",
+     "content": [{"type": "output_audio", "transcript": "One medium iced coffee, coming up."}]}]}}
+
+
+def system_items(frames):
+    return [f for f in frames if f.get("type") == "conversation.item.create"
+            and (f.get("item") or {}).get("role") == "system"]
+
+
+class MiddleTierRehydrationTests(unittest.IsolatedAsyncioTestCase):
+
+    async def _conversation(self, h):
+        """A greeted guest who ordered, then dropped. Returns (sid, metadata)."""
+        a = await h.connect()
+        await a.send(SESSION_UPDATE)
+        meta = await a.wait_type("extension.session_metadata")
+        await a.wait_type("response.done")               # the greeting
+        sid = h.sessions.get_session_id(next(iter(h.sessions._attached.values())))
+        await h.upstream.push(GUEST_SAID)
+        await h.upstream.push(CREW_SAID)
+        await a.wait_for(lambda e: e.get("type") == "response.done" and e["response"]["id"] == "r_t")
+        add_item(sid, "Iced Coffee")
+        await a.ws.close()
+        await h.settle()
+        return sid, meta
+
+    async def _resume(self, h, meta):
+        b = await h.connect()
+        await b.send({"type": "extension.resume", "resume_id": meta["resumeId"]})
+        await b.wait_type("extension.session_resumed")
+        await h.settle()
+        return b
+
+    async def _wait_frames(self, h, predicate, timeout=1.0):
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            if predicate(h.upstream.frames()):
+                return
+            await asyncio.sleep(0.01)
+        raise AssertionError(f"upstream frames: {[f.get('type') for f in h.upstream.frames()]}")
+
+    async def test_turns_are_recorded_from_transcripts_and_responses(self):
+        async with MiddleTierHarness() as h:
+            sid, _ = await self._conversation(h)
+            self.assertEqual(h.sessions.recent_turns(sid), [
+                ("guest", "A medium iced coffee please"), ("crew", "One medium iced coffee, coming up.")])
+            h.sessions.end_session(sid)
+
+    async def test_crew_turns_are_spoken_messages_only_with_a_text_fallback(self):
+        async with MiddleTierHarness() as h:
+            a = await h.connect()
+            await a.send(SESSION_UPDATE)
+            await a.wait_type("response.done")
+            sid = next(iter(h.sessions._session_map.values()))
+            await h.upstream.push({"type": "response.done", "response": {"id": "r_f", "status": "completed", "output": [
+                {"type": "function_call", "name": "get_order", "call_id": "c1", "arguments": "{}"},
+                {"type": "reasoning", "content": [{"type": "reasoning_text", "text": "internal thoughts"}]},
+                {"type": "message", "content": [{"type": "output_text", "text": "Anything else?"}]}]}})
+            await a.wait_for(lambda e: e.get("type") == "response.done" and e["response"]["id"] == "r_f")
+            self.assertEqual(h.sessions.recent_turns(sid), [("crew", "Anything else?")])
+            h.sessions.end_session(sid)
+
+    async def test_a_mid_conversation_resume_rehydrates_and_does_not_greet(self):
+        async with MiddleTierHarness() as h:
+            h.sessions.nudge_after_seconds = 0
+            sid, meta = await self._conversation(h)
+            b = await self._resume(h, meta)
+            frames = h.upstream.frames()
+            self.assertEqual([f["type"] for f in frames], ["session.update", "conversation.item.create"],
+                             "bootstrap first, then the rehydration, and no response.create")
+            text = frames[1]["item"]["content"][0]["text"]
+            self.assertEqual(frames[1]["item"]["role"], "system")
+            for expected in ("Guest: A medium iced coffee please", "Crew: One medium iced coffee, coming up.",
+                             "Iced Coffee", "Do NOT greet"):
+                self.assertIn(expected, text)
+            await b.send(SESSION_UPDATE)                    # the browser re-configures its session
+            await b.drain(0.2)
+            self.assertEqual(h.upstream.frames(kind="response.create"), [], "no greeting after a resume")
+            self.assertEqual(len(system_items(h.upstream.frames())), 1, "no nudge when disabled")
+            h.sessions.end_session(sid)
+
+    async def test_a_resume_before_the_greeting_still_greets(self):
+        def configure(rtmt):
+            rtmt.sessions.first_frame_timeout_seconds = 0.05
+        async with MiddleTierHarness(configure=configure) as h:
+            a = await h.connect()
+            meta = await a.wait_type("extension.session_metadata")
+            sid = next(iter(h.sessions._session_map.values()))
+            await a.ws.close()
+            await h.settle()
+            b = await self._resume(h, meta)
+            self.assertEqual(system_items(h.upstream.frames()), [], "nothing to rehydrate")
+            await b.send(SESSION_UPDATE)
+            await b.wait_type("response.done")
+            self.assertEqual(len(h.upstream.frames(kind="response.create")), 1, "the normal greeting")
+            h.sessions.end_session(sid)
+
+    async def test_a_silent_guest_is_nudged_once(self):
+        async with MiddleTierHarness() as h:
+            h.sessions.nudge_after_seconds = 0.1
+            sid, meta = await self._conversation(h)
+            before = h.sessions.last_activity(sid)
+            await self._resume(h, meta)
+            h.clock.advance(5)
+            await self._wait_frames(h, lambda fs: any(f.get("type") == "response.create" for f in fs))
+            frames = h.upstream.frames()
+            nudge = system_items(frames)[-1]
+            self.assertIn("anything else", nudge["item"]["content"][0]["text"])
+            self.assertEqual(frames.index(nudge) + 1, frames.index(h.upstream.frames(kind="response.create")[0]))
+            await asyncio.sleep(0.3)
+            self.assertEqual(len(h.upstream.frames(kind="response.create")), 1, "only once")
+            self.assertEqual(h.sessions.last_activity(sid), before, "the nudge is not guest activity")
+            h.sessions.end_session(sid)
+
+    async def test_the_nudge_waits_for_session_updated(self):
+        async with MiddleTierHarness() as h:
+            h.sessions.nudge_after_seconds = 0.05
+            sid, meta = await self._conversation(h)
+            h.upstream.ack_session_update = False
+            await self._resume(h, meta)
+            await asyncio.sleep(0.3)
+            self.assertEqual(h.upstream.frames(kind="response.create"), [])
+            await h.upstream.push({"type": "session.updated", "session": {"type": "realtime"}})
+            await self._wait_frames(h, lambda fs: any(f.get("type") == "response.create" for f in fs))
+            h.sessions.end_session(sid)
+
+    async def test_guest_speech_a_transcript_or_a_browser_response_cancels_the_nudge(self):
+        async def speech(h, b):
+            await h.upstream.push({"type": "input_audio_buffer.speech_started", "audio_start_ms": 0, "item_id": "i2"})
+
+        async def transcript(h, b):
+            await h.upstream.push(dict(GUEST_SAID, item_id="i3", transcript="and a donut"))
+
+        async def browser_response(h, b):
+            await b.send({"type": "response.create"})
+
+        for cause in (speech, transcript, browser_response):
+            with self.subTest(cause=cause.__name__):
+                async with MiddleTierHarness() as h:
+                    h.sessions.nudge_after_seconds = 0.15
+                    sid, meta = await self._conversation(h)
+                    b = await self._resume(h, meta)
+                    await cause(h, b)
+                    await asyncio.sleep(0.4)
+                    frames = h.upstream.frames()
+                    self.assertEqual(len(system_items(frames)), 1, "only the rehydration, no nudge")
+                    self.assertLessEqual(len(h.upstream.frames(kind="response.create")), 1)
+                    h.sessions.end_session(sid)
+
+    async def test_the_nudge_is_skipped_while_a_rate_limit_retry_is_pending(self):
+        def configure(rtmt):
+            async def blocked_sleep(delay):
+                await asyncio.Event().wait()
+            rtmt._sleep = blocked_sleep
+
+        async with MiddleTierHarness(configure=configure) as h:
+            h.sessions.nudge_after_seconds = 0.1
+            sid, meta = await self._conversation(h)
+            await self._resume(h, meta)
+            await h.upstream.push(rate_limited_done("r_rl"))
+            await h.settle()
+            await asyncio.sleep(0.4)
+            self.assertEqual(len(system_items(h.upstream.frames())), 1, "no nudge on top of a pending retry")
+            self.assertEqual(h.upstream.frames(kind="response.create"), [])
             h.sessions.end_session(sid)
 
 
