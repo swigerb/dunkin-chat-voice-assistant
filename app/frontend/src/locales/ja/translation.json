@@ -1,14 +1,14 @@
 {
     "app": {
-        "title": "データと話す",
-        "footer": "Azure AI Search + Azure OpenAI で構築",
+        "title": "Dunkin' Voice Crew",
+        "footer": "Azure AI、Azure OpenAI、Azure Speech で構築",
         "showTranscript": "トランスクリプトを表示",
         "stopRecording": "録音を停止",
         "startRecording": "録音を開始",
         "stopConversation": "会話を停止"
     },
     "status": {
-        "notRecordingMessage": "Contoso 従業員の福利厚生について質問してください",
+        "notRecordingMessage": "コーヒーを注文しましょう！",
         "conversationInProgress": "会話が進行中",
         "connectionLost": "接続が切れました。マイクをタップして新しい注文を始めてください。"
     },
@@ -19,5 +19,8 @@
     "groundingFiles": {
         "title": "グラウンディング ファイル",
         "description": "回答をグラウンディングするために使用されるファイル。"
+    },
+    "menu": {
+        "title": "メニュー"
     }
 }
