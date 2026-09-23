@@ -219,6 +219,10 @@ module acaBackend 'core/host/container-app-upsert.bicep' = {
     containerCpuCoreCount: '1.0'
     containerMemory: '2Gi'
     secrets: enableAuth && !empty(authClientSecret) ? { 'aad-client-secret': authClientSecret } : {}
+    // EasyAuth with the client secret set out-of-band: keep it across provisions.
+    preserveExistingSecretNames: enableAuth && empty(authClientSecret) ? [ 'aad-client-secret' ] : []
+    // Orders and the order-resume grace hold are in-process: pin a browser to its replica.
+    stickySessionsAffinity: 'sticky'
     env: union({
       AZURE_SEARCH_ENDPOINT: reuseExistingSearch
         ? searchEndpoint

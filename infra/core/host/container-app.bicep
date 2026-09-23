@@ -81,6 +81,10 @@ param targetPort int = 80
 
 param workloadProfile string = 'Consumption'
 
+@description('Ingress session affinity. "sticky" pins a browser (Envoy affinity cookie) to one replica; requires single revision mode.')
+@allowed([ 'none', 'sticky' ])
+param stickySessionsAffinity string = 'none'
+
 resource userIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = if (!empty(identityName)) {
   name: identityName
 }
@@ -132,6 +136,9 @@ resource app 'Microsoft.App/containerApps@2023-05-02-preview' = {
         external: external
         targetPort: targetPort
         transport: 'auto'
+        stickySessions: {
+          affinity: stickySessionsAffinity
+        }
         corsPolicy: {
           allowedOrigins: union([ 'https://portal.azure.com', 'https://ms.portal.azure.com' ], allowedOrigins)
         }
