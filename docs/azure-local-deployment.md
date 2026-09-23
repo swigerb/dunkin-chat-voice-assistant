@@ -25,7 +25,7 @@ Choose Azure Local when you need the assistant running at the edge (e.g., in-sto
 - **cert-manager** — installed via Flux (included in `flux/infrastructure/`)
 - **NGINX Ingress Controller** — for TLS termination and WebSocket proxying
 - **DNS record** pointing your chosen domain at the cluster's ingress IP
-- **Azure OpenAI** resource with a `gpt-realtime-1.5` deployment (or your configured realtime model)
+- **Azure OpenAI** account **in your own subscription** with a `gpt-realtime-2.1` (version `2026-07-07`) deployment — see [Azure OpenAI: bring your own account](#azure-openai-bring-your-own-account)
 - **(Optional) GPU node(s)** — required only for on-prem model serving; see [GPU Requirements](#gpu-requirements)
 
 ## Repository Layout
@@ -63,11 +63,13 @@ Every operator-specific value has been replaced with a placeholder. Search for `
 
 | Placeholder | Where | What to Set | Example |
 |---|---|---|---|
-| `<your-acr>` | `flux/apps/dunkin-voice/deployment.yaml` | Your ACR login server name (without `.azurecr.io`) | `cadunkinacr` |
-| `<your-domain>` | `flux/apps/dunkin-voice/ingress.yaml` (×2 in hosts + rules) | FQDN pointing at your cluster ingress | `dunkin.adaptivecloudlab.com` |
-| `<your-org>/<your-repo>` | `flux/clusters/example-site/flux-source.yaml` | Your GitHub org and repo for Flux to reconcile | `mgodfre3/dunkin-chat-voice-assistant` |
+| `<your-acr>` | `flux/apps/dunkin-voice/deployment.yaml` | Your ACR login server name (without `.azurecr.io`) | `myregistry` |
+| `<your-domain>` | `flux/apps/dunkin-voice/ingress.yaml` (×2 in hosts + rules) | FQDN pointing at your cluster ingress | `dunkin.example.com` |
+| `<your-org>/<your-repo>` | `flux/clusters/example-site/flux-source.yaml` | Your GitHub org and repo for Flux to reconcile | `my-org/dunkin-chat-voice-assistant` |
+| `<your-aoai-account>` | `flux/apps/dunkin-voice/configmap.yaml` (`AZURE_OPENAI_EASTUS2_ENDPOINT`) | Name of **your own** Azure OpenAI account (see [Azure OpenAI](#azure-openai-bring-your-own-account)) | `my-dunkin-openai` |
+| `AZURE_OPENAI_REALTIME_DEPLOYMENT` | `flux/apps/dunkin-voice/configmap.yaml`, `k8s/configmap.yaml` | Name of your gpt-realtime-2.1 deployment (default `gpt-realtime-2.1`) | `gpt-realtime-2.1-dz` |
 | `PLACEHOLDER` (×3) | `flux/apps/dunkin-voice/secret-provider-class.yaml` | `userAssignedIdentityID`, `keyvaultName`, `tenantId` | (your Azure values) |
-| `${AZURE_ACR_NAME}` | `k8s/deployment.yaml` | Set via `.env` file; substituted by `deploy-edge.sh` at deploy time | `cadunkinacr` |
+| `${AZURE_ACR_NAME}` | `k8s/deployment.yaml` | Set via `.env` file; substituted by `deploy-edge.sh` at deploy time | `myregistry` |
 | `${DOCKER_IMAGE_NAME}` | `k8s/deployment.yaml` | Set via `.env` file; defaults to `dunkin-voice-assistant` | `dunkin-voice-assistant` |
 | `${DOCKER_IMAGE_TAG}` | `k8s/deployment.yaml` | Set via `.env` file; defaults to `latest` | `latest` |
 | `${AKS_MANAGED_IDENTITY_CLIENT_ID}` | `k8s/secret-provider-class.yaml` | Managed identity client ID with Key Vault access | (GUID) |
@@ -85,13 +87,41 @@ The deploy scripts read from a `.env` file at the repo root. Required variables:
 | `AZURE_LOCATION` | ✅ | Azure region (e.g., `eastus2`) |
 | `AZURE_KEYVAULT_NAME` | ✅ | Key Vault name for secrets |
 | `AZURE_ACR_NAME` | ✅ | ACR name (without `.azurecr.io`) |
-| `AZURE_OPENAI_EASTUS2_ENDPOINT` | ✅ | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_EASTUS2_ENDPOINT` | ✅ | Endpoint of **your** Azure OpenAI account, e.g. `https://<your-aoai-account>.openai.azure.com/` |
 | `AZURE_OPENAI_EASTUS2_API_KEY` | ✅ | Azure OpenAI API key |
 | `DOCKER_IMAGE_NAME` | | Container image name (default: `dunkin-voice-assistant`) |
 | `DOCKER_IMAGE_TAG` | | Image tag (default: `latest`) |
 | `K8S_NAMESPACE` | | Kubernetes namespace (default: `dunkin-voice`) |
 | `AKS_MANAGED_IDENTITY_CLIENT_ID` | | Managed identity for Key Vault CSI |
 | `AZURE_TENANT_ID` | | Entra ID tenant ID |
+
+## Azure OpenAI: bring your own account
+
+The edge app's voice runs on Azure OpenAI (`USE_LOCAL_PIPELINE: "false"`), and **every operator uses their
+own Azure OpenAI account**. The manifests ship no account: `AZURE_OPENAI_EASTUS2_ENDPOINT` in
+`flux/apps/dunkin-voice/configmap.yaml` is the placeholder `https://<your-aoai-account>.openai.azure.com/`, and a
+test (`app/backend/tests/test_edge_config_generic.py`) fails if a real `*.openai.azure.com` host is committed
+under `flux/` or `k8s/`.
+
+1. Deploy `gpt-realtime-2.1`, version `2026-07-07`, in your account:
+   ```bash
+   az cognitiveservices account deployment create \
+     --resource-group <your-rg> --name <your-aoai-account> \
+     --deployment-name gpt-realtime-2.1 \
+     --model-format OpenAI --model-name gpt-realtime-2.1 --model-version 2026-07-07 \
+     --sku-name GlobalStandard --sku-capacity 10
+   ```
+   Use `--sku-name DataZoneStandard` for a data-zone deployment. Any deployment name works (for example
+   `gpt-realtime-2.1-dz`). The backend sends `reasoning` to every name it doesn't recognise as gpt-4o or
+   gpt-realtime-1.x.
+2. Set the endpoint and deployment name:
+   - **Flux:** in `flux/apps/dunkin-voice/configmap.yaml`, replace `<your-aoai-account>` and set
+     `AZURE_OPENAI_REALTIME_DEPLOYMENT` to your deployment's name.
+   - **Scripts (`k8s/`):** set `AZURE_OPENAI_EASTUS2_ENDPOINT` / `AZURE_OPENAI_EASTUS2_API_KEY` in `.env`. The
+     deploy script stores them in your Key Vault. Set `AZURE_OPENAI_REALTIME_DEPLOYMENT` in `k8s/configmap.yaml`
+     if your deployment isn't named `gpt-realtime-2.1`.
+3. Optional: check the deployment before rolling out:
+   `python scripts/smoke_realtime.py --endpoint https://<your-aoai-account>.openai.azure.com/ --deployment <name>`.
 
 ## Deployment
 

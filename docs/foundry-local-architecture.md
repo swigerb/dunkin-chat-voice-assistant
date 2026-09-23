@@ -1,7 +1,7 @@
 # Foundry Local Architecture
 
 > **Applies only when `USE_LOCAL_PIPELINE=true`.**
-> The default deployment uses Azure OpenAI `gpt-realtime-1.5` (GA) for voice
+> The default deployment uses Azure OpenAI `gpt-realtime-2.1` (GA) for voice
 > and reasoning over the `/openai/v1/realtime?model=` surface.  This page
 > describes the **opt-in, fully-local** pipeline that replaces the cloud path
 > with edge-hosted models when the feature flag is enabled.
@@ -92,7 +92,7 @@ For full deployment instructions, see [azure-local-deployment.md](azure-local-de
 |---|---|---|
 | Feature flag | `USE_LOCAL_PIPELINE=false` | `USE_LOCAL_PIPELINE=true` |
 | Speech-to-text | Azure OpenAI Realtime | Whisper (edge) |
-| Reasoning / LLM | Azure OpenAI `gpt-realtime-1.5` | Foundry Local Phi-4 Mini (edge) |
+| Reasoning / LLM | Azure OpenAI `gpt-realtime-2.1` | Foundry Local Phi-4 Mini (edge) |
 | Text-to-speech | Azure OpenAI Realtime | Piper TTS (edge) |
 | Menu search | Azure AI Search (cloud) | ChromaDB (edge) |
 | Typical latency | ~200 ms | ~10–20 s |

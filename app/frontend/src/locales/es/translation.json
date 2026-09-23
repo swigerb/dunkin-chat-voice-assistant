@@ -1,15 +1,25 @@
 {
     "app": {
-        "title": "Habla con tus datos",
-        "footer": "Creado con Azure AI Search + Azure OpenAI",
+        "title": "Dunkin' Voice Crew",
+        "footer": "Creado con Azure AI, Azure OpenAI y Azure Speech",
         "showTranscript": "Mostrar transcripción",
         "stopRecording": "Detener grabación",
         "startRecording": "Comenzar grabación",
-        "stopConversation": "Detener conversación"
+        "stopConversation": "Detener conversación",
+        "newOrder": "Empezar un pedido nuevo"
     },
     "status": {
-        "notRecordingMessage": "Pregunta cualquier cosa sobre los beneficios de los empleados de Contoso",
-        "conversationInProgress": "Conversación en progreso"
+        "notRecordingMessage": "¡Pidamos un café!",
+        "conversationInProgress": "Conversación en progreso",
+        "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido.",
+        "sessionEndedIdle": "Tu sesión terminó tras 5 minutos de inactividad. Toca el micrófono para empezar un nuevo pedido.",
+        "rateLimitRetrying": "Perdón, dame un segundito…",
+        "rateLimitFinal": "Estamos un poco ocupados. ¿Puedes repetirlo, por favor?",
+        "reconnecting": "Se perdió la conexión. Reconectando: tu pedido está a salvo…",
+        "resumed": "Reconectado: tu pedido sigue aquí.",
+        "resumedTapToContinue": "Reconectado: tu pedido sigue aquí. Toca el micrófono para continuar.",
+        "resumeRejected": "No pudimos recuperar tu pedido. Toca el micrófono para empezar uno nuevo.",
+        "superseded": "Este pedido continuó en otra ventana. Toca el micrófono para empezar de nuevo."
     },
     "history": {
         "transcriptHistory": "Historial de transcripciones",
@@ -18,5 +28,8 @@
     "groundingFiles": {
         "title": "Archivos de fundamentación",
         "description": "Archivos utilizados para fundamentar las respuestas."
+    },
+    "menu": {
+        "title": "Menú"
     }
 }

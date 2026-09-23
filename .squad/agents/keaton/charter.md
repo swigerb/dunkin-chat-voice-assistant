@@ -14,3 +14,7 @@ Technical lead and code reviewer. Owns architecture decisions, scoping, and qual
 - Azure OpenAI, Azure AI Search, Azure Container Apps
 - Code review, refactoring patterns, modernization strategies
 - WebSocket patterns, real-time API design
+
+## Model
+
+- **Preferred:** claude-opus-5.5

@@ -58,6 +58,8 @@ export default function useDashboardSocket() {
           }
           break;
         case "dashboard.order_update":
+          // One card per order: a later update (including after the guest's
+          // connection is resumed, same sessionId) replaces the earlier one.
           setOrders(prev => {
             const next: OrderEvent[] = [
               {
@@ -66,10 +68,20 @@ export default function useDashboardSocket() {
                 orderSummary: data.orderSummary ?? {},
                 timestamp: data.timestamp ?? new Date().toISOString()
               },
-              ...prev
+              ...prev.filter(order => order.sessionId !== data.sessionId)
             ];
             return next.slice(0, 12);
           });
+          break;
+        case "session.ended":
+          // The guest ended the order, went idle, or their resume hold expired.
+          if (data.cars) {
+            setCars(data.cars as DriveThruCarState[]);
+          }
+          if (data.metrics) {
+            setMetrics(data.metrics as DashboardMetrics);
+          }
+          setOrders(prev => prev.filter(order => order.sessionId !== data.sessionId));
           break;
       }
     };

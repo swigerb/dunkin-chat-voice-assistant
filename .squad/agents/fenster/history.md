@@ -36,3 +36,27 @@
 - **azure-search-documents 12.0:** Migrated setup_intvect.py — AzureOpenAIParameters→AzureOpenAIVectorizerParameters, resource_uri→resource_url, deployment_id→deployment_name
 - **ruff check:** 1 isort fix (setup_intvect.py alphabetical ordering after rename), now clean
 - **Tests:** 59 pass (fixed pre-existing test_app.py static dir issue — tests now create the dir in setUp)
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- `config.yaml` gains:
+  - `model.{reasoning_effort, reasoning_model, parallel_tool_calls, transcription_model, default_voice: marin}`;
+  - `connection.ws_compression: false`.
+- Item 6: aiohttp 3.14.3 kills a permessage-deflate socket with 1002 "non-zero reserved bits" when a PONG precedes a compressed frame (reproduced in Dunkin).
+  - Browser socket: `WebSocketResponse(compress=_WS_COMPRESS)`.
+  - Upstream: `ws_connect(compress=0)`.
+  - Same for the edge `/realtime` in `rtmt_local.py`.
+- Cloud path verified with chromadb/onnxruntime **absent** from the venv: full suite green.
+
+## Round 3 (2026-09-23)
+- D1 tool contract: `update_order` rejection reasons `item_quantity_limit`, `order_item_limit`, `extra_in_item_name` (with `suggested_calls`), `extra_without_drink`. Success results now carry `server_text` for the model; the browser still gets the order summary.
+- R1 wiring: `RateLimitSettings.from_config(get_config()["resilience"]["rate_limit"])` in `create_app`; `_process_message_to_client(..., recovery=None)` keeps the old call signature for existing tests.
+- Known leftover: a combined item name is still accepted as-is when an allowed base drink is already in the order (pre-existing behaviour).
+
+## Order resume port (2026-09-24)
+- **Session lifecycle** (`session_manager.py`): attached → detached (grace 120 s, capped by the idle budget; `max_detached` 20) → resumed or ended. A never-announced session ends at once on detach.
+- **Crew dashboard** (new: voice sessions were never published before):
+  - `publish_start` runs at the greeting, so provisional and resuming sockets never create cars; `publish_order` follows `update_order`.
+  - `end_session` → `DriveThruSimulator.release_session` → `session.ended` removes the car and its order card. This covers New order, idle close and hold expiry.
+  - A resume keeps the same car and card. The dashboard feed dedupes per sessionId.
+- **Behaviour choice to flag:** an ended order that had items is also removed from the dashboard (it isn't a completed order).
+- **Pre-existing, not fixed:** `RTMiddleTier.voice_choice` is shared across sessions.

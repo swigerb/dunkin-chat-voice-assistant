@@ -56,3 +56,55 @@ Implemented the hybrid local inference path for Azure Local edge deployments, fu
 - ChromaDB query latency with the full 80+ item menu index on AKS Edge
 - Piper TTS voice quality and streaming chunk timing at 24 kHz
 - K8s service mesh connectivity between sidecar containers
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- **Item 1:**
+  - Server bootstrap `session.update` is the first upstream frame.
+  - Greeting only after the browser update and `session.updated` (5 s timeout).
+  - Voice lock after assistant audio (defer `set_voice`; omit `audio.output.voice`).
+  - Request-id read from the request headers.
+- **Item 2:**
+  - gpt-realtime-2.1, `reasoning.effort=low`, only for reasoning deployments; `configure_realtime_model()`.
+  - Transcription is server-owned (whisper-1).
+  - Edge configmaps set to 2.1; `USE_LOCAL_PIPELINE` gating unchanged.
+- **Item 4:**
+  - `_SessionUpdateGuard` correlates `error` events to tracked session.updates (by event_id, or the oldest unacked update).
+  - Exactly one minimal fallback; `_reasoning_rejected` is process-wide.
+- **Item 5:**
+  - `scripts/smoke_realtime.py` + postdeploy hook (never fails a deploy).
+  - Live finding: Sonic's synthesiser (user turn + "say this") made 2.1 *answer* the phrase instead of reading it (0/3 verbatim). Phrase-in-`response.instructions` gave 6/6 verbatim.
+  - Tokens now come from the azd env's subscription/tenant. Another sign-in on this machine had moved the global `az` default, which caused HTTP 400 tenant mismatches.
+- **Live, 2026-09-23:**
+  - Smoke check PASS on 2.1 (reasoning low) and on the 1.5 rollback (reasoning off); verbatim transcript on both.
+- **Brand spot-check** (Dunkin prompt + real tools/search; 6 scenarios × 2 reps; text turns; guest confirms, because the prompt adds only "after the guest has agreed"):
+  - 2.1 effort low: 12/12 correct, first-audio median 0.88 s.
+  - 2.1 effort none: 10/12, median 0.87 s.
+  - 1.5: 12/12, median 1.63 s.
+  - 0 off-brand mentions.
+  - The 2 effort-none misses: the model sent "Caramel Craze Latte with Extra Espresso Shot" as ONE item, the extras guard rejected it, and the model still said "All set". Keep `low`. Worth a prompt/tool follow-up.
+
+## Round 3 (2026-09-23, branch feat/round3)
+- **dz reasoning test:** `gpt-realtime-2.1-dz` sends `reasoning` under `reasoning_model: auto` (name not hardcoded; azd env sets it). Docs say the deployment name is configurable.
+- **D1 "All set" after a rejected extra — root cause:** rejections were plain prose with no status, AND successful TO_CLIENT results sent the model an *empty* function_call_output, so "rejected" and "added" looked the same to the model. The prompt said nothing about rejections.
+  - Fix: rejections are TO_SERVER JSON `{status:"rejected", item_added:false, reason, message, instructions, suggested_calls}` (the drink, then the extra as its own item); successes send `{status:"ok", ...order_items}` via `ToolResult.server_text` / `model_output()` (cloud + edge). Two prompt sentences: one item per call; only claim an add on status ok.
+  - Live (gpt-realtime-2.1-dz, 5 reps each): FALSE "all set" before 6/20 (natural@none 2, inject@none 2, inject@low 2) → after 0/20; all 20 ended with latte + extra shot in the order.
+- **R1 backend:** per-connection `_RateLimitRecovery` ladder in rtmt.py (silent retry → attempt-1 notice + retry → final). Cancelled on speech_started / foreign response.created / disconnect; only `response.create` is resent, so tool follow-ups never re-run the tool. Config `resilience.rate_limit`, env `RATE_LIMIT_RECOVERY_ENABLED`.
+- **Apology clips:** generated with 2.1 voice marin via `scripts/generate_apology_clips.py`. The transcript must match the phrase word for word or nothing is written.
+
+## Order resume port (2026-09-24, branch feat/order-resume from dev @ a4a25bd)
+- **Step 0.5, idle close (Dunkin had none):**
+  - `SessionManager.close_idle_sessions` checks every `security.idle_check_interval_seconds` (15) and closes after `security.idle_timeout_seconds` (300) with 4000 `idle_timeout`.
+  - Mic frames aren't guest activity; speech, transcripts and control frames are.
+- **Step 2, handshake:**
+  - `extension.resume` is honoured only as the first client frame.
+  - Resume ids: `token_urlsafe(32)`, stored as sha256, single-use and rotated on every resume, logged as sha256[:8] only.
+  - Rejections: `expired`, `unknown`, `not_first_frame`.
+  - A second socket on the same session supersedes the first (4002).
+  - Removed the redundant `first_frame_pending` flag (its mutant was equivalent).
+- **Step 3:**
+  - The new upstream gets the bootstrap session.update, then ONE system rehydration item (order + last 6 turns / 2000 chars), then no greeting.
+  - One nudge after `resume.nudge_after_seconds` (30) of silence. It is skipped if a rate-limit retry is pending, and cancelled by guest speech, a transcript or a browser response.create.
+  - `_nudge_sleep` seam added so the nudge tests are deterministic. One full-suite run had shown a 0.1 s race.
+- **Edge:**
+  - The flux configmap runs `USE_LOCAL_PIPELINE=false`, i.e. the cloud `rtmt.py` path, so resume applies on edge too.
+  - `rtmt_local.py` (`USE_LOCAL_PIPELINE=true`) has no resume, idle close or dashboard publishing; its tests are untouched and pass with chromadb/onnxruntime absent.

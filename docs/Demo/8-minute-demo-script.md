@@ -50,7 +50,7 @@ graph LR
     Browser["🎤 Browser<br/>(Chrome/Edge)"] -->|"WebSocket<br/>wss://"| Nginx["🔒 NGINX TLS"]
     Nginx -->|HTTP| Backend["🐍 Python Backend<br/>(aiohttp)"]
 
-    Backend -->|"WebSocket (default)"| AzureOAI["☁️ Azure OpenAI<br/>gpt-realtime-1.5"]
+    Backend -->|"WebSocket (default)"| AzureOAI["☁️ Azure OpenAI<br/>gpt-realtime-2.1"]
     Backend -->|"Semantic search (default)"| AzureSearch["🔍 Azure AI Search"]
     Backend -->|"HTTP (local mode)"| Whisper["🎙️ Whisper STT"]
     Backend -->|"HTTP (local mode)"| Phi4["🧠 Phi-4 Mini<br/>Foundry Local (GPU)"]
@@ -77,7 +77,7 @@ graph LR
 > **Hybrid (default, `USE_LOCAL_PIPELINE=false`):**
 >
 > - The Python backend on AKS Arc forwards audio to **Azure OpenAI
->   gpt-realtime-1.5** — the GA realtime model on the `/openai/v1/realtime`
+>   gpt-realtime-2.1** — the GA realtime model on the `/openai/v1/realtime`
 >   surface.  Speech-to-text, reasoning, and text-to-speech happen in one
 >   streaming WebSocket connection.  Sub-second latency.
 > - Menu retrieval uses **Azure AI Search** with semantic hybrid search.
@@ -159,12 +159,12 @@ graph LR
 > GA voices** available: alloy, ash, ballad, coral, echo, sage, shimmer, verse,
 > marin, cedar.  Each has a short descriptor.
 >
-> *[Change voice to 'shimmer' or 'echo']*
+> *[Stop the mic, change voice to 'cedar' or 'shimmer', refresh the page, tap the mic]*
 >
-> This takes effect **immediately** — no redeploy.  The browser sends the choice
-> to the middle tier, which issues a `session.update` to the realtime model.
-> The next response comes back in the new voice.  It persists across page
-> refreshes via localStorage."
+> No redeploy.  The browser sends the choice to the middle tier, which issues a
+> `session.update` to the realtime model, and the greeting comes back in the new
+> voice.  The default is marin, which OpenAI recommends alongside cedar.  It
+> persists across page refreshes via localStorage."
 
 ---
 
@@ -281,7 +281,7 @@ graph LR
 
 | Question | Answer |
 |----------|--------|
-| What model powers the live voice? | **gpt-realtime-1.5** (GA, version 2026-02-23) on the `/openai/v1/realtime?model=` surface. |
+| What model powers the live voice? | **gpt-realtime-2.1** (GA, version 2026-07-07) on the `/openai/v1/realtime?model=` surface. |
 | What about the old gpt-4o-realtime-preview? | Retired.  Cannot be provisioned.  We migrated to the GA surface. |
 | What model runs locally? | Phi-4 Mini Instruct (CUDA GPU, version 5) via Foundry Local operator. |
 | How does local compare to cloud? | Same app code, different endpoint.  Cloud ≈ 200 ms.  Local ≈ 10–20 s.  One env var toggles. |
@@ -289,7 +289,7 @@ graph LR
 | Is there authentication? | Public by default.  Entra ID is opt-in via `AZURE_AUTH_ENABLED`.  See README. |
 | How is this deployed? | Flux GitOps reconciles from GitHub to AKS Arc.  See `docs/azure-local-deployment.md`. |
 | Container size? | 383 MB optimized image. |
-| Multi-language? | Yes — gpt-realtime-1.5 handles transcription and translation for English, Spanish, Mandarin, French, and more. |
+| Multi-language? | Yes — gpt-realtime-2.1 handles transcription and translation for English, Spanish, Mandarin, French, and more. |
 | What voices are available? | Ten GA voices in the settings picker: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar. |
 | What are the ordering limits? | 10 per item, 25 per order.  Configured in `config.yaml`. |
 | What's happy hour? | 25% off cold beverages and signature lattes, 2–5 PM store time.  Automatic. |

@@ -174,3 +174,30 @@
 - `flux/apps/dunkin-voice/configmap.yaml` still has `AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-4o-realtime-preview"` — this is live infra config, not docs, so I did not modify it per the "documentation only" rule. It should be updated when the deployment model is rotated.
 - The `.env-sample` shows `gpt-realtime-mini` which may need updating to `gpt-realtime-1.5` — again, application config, not docs scope.
 
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Reviewed and sequenced the 7-item Sonic port. One commit per item: 5ea449c, 0513622, 98be241, 5a73acf, 7b82260, 6466071, 14a68ca. Follow-up c4249de (smoke check fixes the live probe found).
+- **Item 1 reconciliation with the Sprint-1 greeting fix (Godfrey / `ba8c94d` lineage):**
+  - Kept per-connection `tools_pending`.
+  - Replaced the `session_configured` bool, which only gated mid-session voice updates. The greeting now waits for the relayed browser update plus `session.updated`, and every upstream socket is bootstrapped first.
+  - `ba8c94d` is **not** an ancestor of `dev`. Its request-id fix read `ws.headers`, which are the response headers; now fixed to read the request headers.
+- **Shared Azure OpenAI (`cog-axgpampkq3yfa`, rg-sonic-demo):**
+  - `AZURE_OPENAI_REUSE_EXISTING=true`, so `module openAi` is skipped. Provision only adds deterministic-guid role assignments there, which are idempotent. No Sonic deployment is redeclared.
+  - gpt-realtime-2.1 cap 10 is shared with Sonic; contention is the remaining risk.
+- Scope notes:
+  - Sonic's idle-4000, token-wait and `response.cancel` parts of item 6 are N/A (Dunkin has none of those features).
+  - `/dashboard` socket untouched (server-push only).
+  - es/fr/ja `status.notRecordingMessage` still has stale Contoso copy (pre-existing, out of scope).
+
+## Round 3 review (2026-09-23)
+- Commits on feat/round3: 9a2d398 (dz), d41f5bf (R3), ecb4ebf (D2), e4c4b1a (D1), be235fc (R1 backend), 6f7f0c0 (R1 frontend + clips). Not pushed, merged or deployed.
+- Only a deploy can confirm:
+  - real production rate-limit behaviour and clip playback / mic mute in a browser;
+  - an operator's edge cluster applying the placeholder config with their own AOAI account.
+
+## Order resume review (2026-09-24)
+- **Commits on feat/order-resume:** daf6683 (.env.template), 8376080 (idle close), f4283af (step 0 infra), 8554085 (step 1 detach), 49043b1 (step 2 handshake), 4b6b02a (step 3 rehydrate/nudge), c94771d (dashboard), 9a70e5c (frontend), f96cc60 (e2e), 3a5d843 (nudge test deflake). Not pushed, merged or deployed.
+- **Only a deploy can confirm:**
+  - sticky affinity plus the single worker in ACA;
+  - the secret surviving `azd provision`;
+  - the real model obeying the rehydration item (no re-greet) and the nudge wording;
+  - real-network drop timing against the 120 s hold.

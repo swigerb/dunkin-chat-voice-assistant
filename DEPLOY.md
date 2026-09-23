@@ -47,6 +47,40 @@ This provisions all infrastructure (Container Apps, AI Search, OpenAI, Storage)
 and deploys the application. The `postprovision` hook automatically sets up the
 search index with menu embeddings.
 
+A later `azd provision` keeps the running image. azd sets
+`SERVICE_BACKEND_RESOURCE_EXISTS=true` after the first deploy, and
+`infra/main.parameters.json` maps it to `webAppExists`. If that variable name
+does not match the `backend` service in `azure.yaml`, `exists` is always false.
+Every provision then resets the app to the `containerapps-helloworld`
+placeholder until the next `azd deploy`. `tests/test_azd_service_wiring.py`
+guards the mapping.
+
+### Post-deploy realtime smoke check
+
+After `azd deploy` / `azd up`, the `postdeploy` hook runs `scripts/smoke_realtime.py`. The script
+builds the exact `session.update` payloads the backend sends: the bootstrap, a relayed browser update
+and the minimal fallback. It uses the app's own prompt, tool schemas and `config.yaml`. It sends them
+to the live realtime deployment and checks that each comes back as `session.updated` with all three
+tools (`search`, `update_order`, `get_order`) and `tool_choice: auto`. It also checks that guest
+speech is transcribed with the configured transcription model.
+
+The hook **never fails a deployment**. It is non-interactive and `continueOnError`, and the wrapper
+always exits 0. It prints a loud warning instead. Right after a first provision, the OpenAI role
+assignment can take a few minutes to apply, so "could not run" is expected then. Rerun it by hand:
+
+```bash
+python scripts/smoke_realtime.py                     # azd env values
+python scripts/smoke_realtime.py --deployment gpt-realtime-1.5 --skip-transcription
+azd env set DUNKIN_SKIP_REALTIME_SMOKE true          # turn the hook off
+```
+
+Exit codes: `0` passed, `1` a check failed (the model would run without its tools), `2` could not run.
+
+The token is requested for the azd env's `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, not for
+whichever `az` or `azd` account is currently active. So the check still works when you are also signed
+in to another tenant. It uses the `az` sign-in that owns the subscription, then `azd` and `az` pinned to
+the tenant. Override with `--tenant` / `--subscription`.
+
 ## EasyAuth (Entra ID Authentication) — Optional
 
 The template supports opt-in Entra ID authentication via Container Apps EasyAuth.

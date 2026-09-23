@@ -20,7 +20,7 @@ For **edge deployment** details, see
 > "This is a voice ordering assistant running on Azure Local.  The guest speaks
 > into the browser, the request goes through Kubernetes ingress to an
 > edge-hosted Python backend, and the live deployment uses **Azure OpenAI
-> gpt-realtime-1.5** for sub-second voice interaction.  Menu retrieval and order
+> gpt-realtime-2.1** for sub-second voice interaction.  Menu retrieval and order
 > logic stay local on the edge using Azure AI Search (cloud default) or
 > ChromaDB (opt-in local).  We also support a fully-local path using Whisper,
 > Foundry Local with Phi-4 Mini, and Piper when `USE_LOCAL_PIPELINE=true`."
@@ -31,7 +31,7 @@ For **edge deployment** details, see
 > It's an edge application running on Azure Local with a real Kubernetes
 > deployment model.
 >
-> In the default deployment, **Azure OpenAI gpt-realtime-1.5** provides fast
+> In the default deployment, **Azure OpenAI gpt-realtime-2.1** provides fast
 > speech-to-text, reasoning, and text-to-speech over a single streaming
 > WebSocket—the GA `/openai/v1/realtime` surface.  Menu search is powered by
 > **Azure AI Search** with semantic hybrid retrieval.
@@ -49,7 +49,7 @@ For **edge deployment** details, see
 
 1. Open the guest experience and the crew dashboard side by side.
 2. Explain that the active deployment is on Azure Local, managed by Flux GitOps.
-3. Call out that the default deployment uses **gpt-realtime-1.5** (GA) for the
+3. Call out that the default deployment uses **gpt-realtime-2.1** (GA) for the
    live voice loop.
 4. Place an order by voice.  Point out the real-time transcription, order panel
    updates (tool calls), and natural response.
@@ -95,7 +95,7 @@ For **edge deployment** details, see
 
 | Mode | `USE_LOCAL_PIPELINE` | Speech-to-text | LLM | Text-to-speech | Menu retrieval | Typical latency |
 |---|---|---|---|---|---|---|
-| **Hybrid (default)** | `false` | Azure OpenAI Realtime | `gpt-realtime-1.5` (GA) | Azure OpenAI Realtime | Azure AI Search | ~200 ms |
+| **Hybrid (default)** | `false` | Azure OpenAI Realtime | `gpt-realtime-2.1` (GA) | Azure OpenAI Realtime | Azure AI Search | ~200 ms |
 | **Fully-local (opt-in)** | `true` | Whisper (edge) | Foundry Local Phi-4 Mini (edge) | Piper (edge) | ChromaDB (edge) | ~10–20 s |
 
 ---
@@ -106,7 +106,7 @@ For **edge deployment** details, see
 graph LR
     Browser["🎤 Browser"] -->|"wss://"| Ingress["NGINX ingress"]
     Ingress --> Backend["Python aiohttp backend"]
-    Backend -->|"Hybrid path"| AzureOAI["Azure OpenAI<br/>gpt-realtime-1.5"]
+    Backend -->|"Hybrid path"| AzureOAI["Azure OpenAI<br/>gpt-realtime-2.1"]
     Backend -->|"Default search"| AzureSearch["Azure AI Search"]
     Backend -->|"Local path"| Whisper["Whisper STT"]
     Backend -->|"Local path"| Phi4["Foundry Local Phi-4 Mini"]
@@ -135,15 +135,42 @@ graph LR
 The settings dialog exposes **ten GA realtime voices**: alloy, ash, ballad,
 coral, echo, sage, shimmer, verse, marin, cedar.
 
-- Change takes effect **immediately** on the live conversation — no redeploy
-  needed.
-- The selection persists in the browser (`localStorage`) and is sent to the
-  middle tier, which issues a `session.update` with
+- No redeploy needed. The selection persists in the browser (`localStorage`)
+  and is sent to the middle tier, which issues a `session.update` with
   `audio.output.voice`.
-- The initial default is `coral` (configured in `app/backend/config.yaml` →
-  `model.default_voice`).
+- The realtime service locks the voice once the assistant has spoken, so a
+  change made mid-conversation applies from the **next** conversation (the next
+  page load).
+- The initial default is `marin` (configured in `app/backend/config.yaml` →
+  `model.default_voice`); OpenAI recommends `marin` and `cedar`.
 
-**Demo tip:** Switch voices mid-conversation to show the live-swap capability.
+**Demo tip:** Pick a voice, refresh the page, then tap the mic to show the
+swap. The greeting is spoken in the new voice.
+
+---
+
+## If the Connection Drops
+
+When the browser's `/realtime` socket closes (Wi-Fi blip, proxy timeout, app
+restart), the server-side session and its order are gone. The app then:
+
+- stops the mic and shows **"Connection lost. Tap the mic to start a new order."**
+- keeps the old order on screen until the guest taps the mic, then clears it
+- reconnects in the background, but **never restarts the mic on its own**
+- drops mic audio while the socket is down instead of replaying it into the new session
+
+Tap the mic to carry on. If background retries have run out, the tap re-opens
+the socket.
+
+If the shared Azure OpenAI quota is hit mid-order, the carhop doesn't freeze: the
+answer is retried silently, then the guest hears a short local "Sorry, give me just
+a second." clip while it's retried again, and if it's still busy the screen asks
+them to say it again (`config.yaml` → `resilience.rate_limit`).
+
+Browser-socket compression (permessage-deflate) is off (`config.yaml` →
+`connection.ws_compression: false`). aiohttp 3.14.2/3.14.3 kill a compressed
+socket with close 1002 ("non-zero reserved bits") after a ping/pong
+([aio-libs/aiohttp#13274](https://github.com/aio-libs/aiohttp/issues/13274)).
 
 ---
 
@@ -250,14 +277,14 @@ kubectl get deploy,svc -n dunkin-voice | grep -E "whisper|piper"
 
 | Question | Answer |
 |---|---|
-| What model powers the live voice? | **gpt-realtime-1.5** (GA, version 2026-02-23) on the `/openai/v1/realtime?model=` surface. |
+| What model powers the live voice? | **gpt-realtime-2.1** (GA, version 2026-07-07) on the `/openai/v1/realtime?model=` surface. |
 | Why isn't everything fully local? | Hybrid gives ~200 ms latency and best voice quality. Fully-local is available when cloud dependency must be minimized. |
 | What stays local in hybrid mode? | App container, session state, tool execution, Kubernetes runtime, crew dashboard. The cloud dependency is specifically voice+reasoning (Azure OpenAI) and menu search (Azure AI Search). |
 | What is Foundry Local? | Microsoft's framework for running AI models on your own hardware—Kubernetes operator + model catalog + OpenAI-compatible API. |
 | Is the demo authenticated? | Public by default. Entra ID auth is opt-in via `AZURE_AUTH_ENABLED=true`. |
 | What about menu search? | Default: Azure AI Search (semantic hybrid). Opt-in local: ChromaDB with ONNX MiniLM-L6-v2 embeddings. |
 | Container size? | 383 MB optimized image (down from 8.9 GB). |
-| Multi-language? | Yes — gpt-realtime-1.5 handles transcription and translation across English, Spanish, Mandarin, French, and more. In local mode, Whisper provides multi-language STT. |
+| Multi-language? | Yes — gpt-realtime-2.1 handles transcription and translation across English, Spanish, Mandarin, French, and more. In local mode, Whisper provides multi-language STT. |
 
 ---
 

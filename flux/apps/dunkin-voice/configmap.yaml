@@ -11,7 +11,13 @@ data:
   CHROMA_COLLECTION_NAME: "menu_items"
   # Hybrid mode: Azure OpenAI Realtime for voice, local ChromaDB for search
   USE_LOCAL_PIPELINE: "false"
-  # Azure OpenAI Realtime
-  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "coral"
-  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-1.5"
-  AZURE_OPENAI_EASTUS2_ENDPOINT: "wss://acx-dunkin-edge-openai.openai.azure.com/"
+  # Azure OpenAI Realtime -- YOUR OWN Azure OpenAI account.
+  # OPERATOR: deploy gpt-realtime-2.1 (version 2026-07-07) in your Azure OpenAI
+  # account (see docs/azure-local-deployment.md), then set:
+  #   - AZURE_OPENAI_REALTIME_DEPLOYMENT to that deployment's name
+  #     (e.g. gpt-realtime-2.1, or gpt-realtime-2.1-dz for DataZoneStandard)
+  #   - AZURE_OPENAI_EASTUS2_ENDPOINT: replace <your-aoai-account> with your
+  #     account name. Example: https://my-dunkin-openai.openai.azure.com/
+  AZURE_OPENAI_REALTIME_VOICE_CHOICE: "marin"
+  AZURE_OPENAI_REALTIME_DEPLOYMENT: "gpt-realtime-2.1"
+  AZURE_OPENAI_EASTUS2_ENDPOINT: "https://<your-aoai-account>.openai.azure.com/"

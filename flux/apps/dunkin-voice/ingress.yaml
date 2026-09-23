@@ -13,7 +13,7 @@ spec:
   tls:
     - hosts:
         # OPERATOR: replace <your-domain> with your site's FQDN
-        # Example: dunkin.adaptivecloudlab.com
+        # Example: dunkin.example.com
         - <your-domain>
       secretName: dunkin-tls
   defaultBackend:

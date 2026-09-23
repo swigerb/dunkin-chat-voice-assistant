@@ -157,6 +157,19 @@ class DriveThruSimulator:
             self._order_timestamps.append(datetime.now(UTC))
             await self._broadcast_snapshot("car.complete")
 
+    async def release_session(self, session_id: str) -> None:
+        """A voice session ended without the crew completing it (guest ended it,
+        idle close, or its resume hold expired): take its car off the lane. Not a
+        completed order, so it doesn't count toward orders per hour."""
+        async with self._lock:
+            car = self._cars_by_session.pop(session_id, None)
+            if car is None:
+                return
+            if car in self._cars:
+                self._cars.remove(car)
+            await self._broadcast(DriveThruEvent(
+                "session.ended", {"sessionId": session_id, "carId": car.car_id, **self._snapshot_payload()}))
+
     async def complete_car(self, car_id: str) -> None:
         """Mark a car as complete by car_id (used by the crew dashboard)."""
         async with self._lock:
@@ -214,12 +227,14 @@ class DriveThruSimulator:
             }
 
     async def _broadcast_snapshot(self, event_type: str) -> None:
+        await self._broadcast(DriveThruEvent(event_type, self._snapshot_payload()))
+
+    def _snapshot_payload(self) -> dict[str, Any]:
         self._recompute_metrics()
-        payload = {
+        return {
             "cars": [car.as_dict() for car in self._cars if car.status != DriveThruStatus.COMPLETE],
             "metrics": self._metrics.as_dict(),
         }
-        await self._broadcast(DriveThruEvent(event_type, payload))
 
     async def _broadcast(self, event: DriveThruEvent) -> None:
         for queue in list(self._listeners):

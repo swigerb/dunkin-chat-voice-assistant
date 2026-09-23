@@ -37,3 +37,32 @@
 - **Brand preserved:** All Dunkin brand vars (brand-orange, brand-pink, brand-cream, brand-brown, Fredoka font) confirmed in built CSS
 - **CSS size:** 33,972→47,932 bytes (TW4 generates more utilities by default; acceptable for demo)
 - **Build:** tsc + vite build clean. **Tests:** 13 pass (5 files, unchanged count)
+
+## Sonic parity port — `feat/sonic-parity` (2026-09-23)
+- Item 3:
+  - `lib/voices.ts` is the single source of the 10 voices; marin/cedar marked recommended, `DEFAULT_VOICE=marin`.
+  - `resolveVoice()` drops unknown stored voices; Settings renders from `VOICE_OPTIONS`.
+  - Docs corrected: a voice change applies from the next conversation, not live.
+- Item 1: App.tsx sends the voice before `startSession()`.
+- Item 6:
+  - `useRealtime` exposes `onConnectionLost({code, reason})`, `isConnected`, `reconnect()`; parks on `onReconnectStop`; audio append/clear use `keep=false`.
+  - App ends the conversation on loss, shows `status.connectionLost` (en/es/fr/ja), clears the order on the next tap, and never auto-restarts the mic.
+- Frontend tests 13 → 31. Lockfiles unchanged.
+
+## Round 3 (2026-09-23)
+- R3: es/fr/ja "not recording" copy had Contoso template wording; rewritten per locale. Guard test: no template leftovers + key parity with en.
+- R1 frontend: `extension.rate_limited` → `lib/apology-clip.ts` plays `/audio/apology-<lng>.wav` (UI language, fallback en), mic sending muted while it plays, `StatusMessage` shows `status.rateLimitRetrying` / `status.rateLimitFinal`. Cleared on the answer's first audio, on guest speech, or on stop.
+- Clips: 24 kHz mono PCM16, 2.4–2.9 s, committed under `app/frontend/public/audio/`.
+
+## Order resume port (2026-09-24)
+- **`useRealtime`:**
+  - Resume id in sessionStorage (`dunkin.resumeId`, per tab); `extension.resume` is the literal first frame.
+  - The hook owns the queue; react-use-websocket is only ever called with keep=false.
+  - `classifyClose` sorts closes into idle / superseded / ended / transport. Only transport reconnects: 10 tries, 1 s doubling to 30 s, plus jitter.
+  - ended (1000 `session_ended`) re-opens a fresh socket at once. Dunkin has no token endpoint, so there is no token wait.
+- **App:**
+  - Notices: reconnecting / resumed / tap-to-continue / resume rejected / superseded.
+  - Mic auto-restarts after a resume; `recorder.start()` reports false after a 1.5 s suspended-context timeout.
+  - "Start a new order" button.
+- **Delta from Sonic:** a tap made while still reconnecting now starts the mic as soon as the resume lands. Sonic waited for the 5 s greeting safety timer.
+- **Tests:** frontend 65 → 132.

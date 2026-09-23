@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "agentModelOverrides": {
+    "keaton": "claude-opus-5.5"
+  }
+}

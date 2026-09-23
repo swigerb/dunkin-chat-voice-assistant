@@ -116,3 +116,17 @@ Expanded test coverage across backend and frontend.
 - Frontend: 4 → 13 tests
 - 6 new test files
 - All passing, no production code changes
+
+---
+
+### Keaton: Sonic parity port (feat/sonic-parity)
+**Timestamp:** 2026-09-23
+
+- The realtime default is **gpt-realtime-2.1** with `reasoning.effort=low`; gpt-realtime-1.5 is the rollback. Spot-check: low 12/12 vs none 10/12. At none, the model folded an extra into the drink name, the extras guard rejected it, and the model still claimed it was added.
+- Default voice is **marin**. Voice changes apply from the next conversation (GA voice lock).
+- The server bootstraps every upstream session. A rejected session.update gets exactly one minimal fallback.
+- WebSocket compression is off (`connection.ws_compression: false`) until aiohttp fixes the PONG + compressed-frame 1002 bug.
+- On connection loss the conversation ends, the guest sees a notice, and there is no silent mic restart.
+- `webAppExists` reads `SERVICE_BACKEND_RESOURCE_EXISTS`.
+- Smoke check tokens use the azd env subscription/tenant, never the global `az` default.
+- Shared OpenAI with Sonic (`cog-axgpampkq3yfa`): reuse only, with idempotent role assignments. 2.1 capacity is shared.

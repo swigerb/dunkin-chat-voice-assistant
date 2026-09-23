@@ -27,7 +27,7 @@ spec:
       containers:
         - name: dunkin-voice
           # OPERATOR: replace <your-acr> with your Azure Container Registry name
-          # Example: cadunkinacr.azurecr.io/dunkin-voice-assistant:latest
+          # Example: myregistry.azurecr.io/dunkin-voice-assistant:latest
           image: <your-acr>.azurecr.io/dunkin-voice-assistant:latest
           imagePullPolicy: Always
           ports:

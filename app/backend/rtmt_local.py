@@ -13,7 +13,7 @@ import aiohttp
 from aiohttp import web
 
 from order_state import SessionIdentifiers, order_state_singleton
-from rtmt import Tool, ToolResult, ToolResultDirection
+from rtmt import _WS_COMPRESS, Tool, ToolResult, ToolResultDirection
 
 logger = logging.getLogger("coffee-chat")
 
@@ -273,16 +273,16 @@ class RTLocalPipeline:
             tool = self.tools.get(fn_name)
             if tool is None:
                 tool_output = f"Unknown tool: {fn_name}"
-                destination = ToolResultDirection.TO_SERVER
+                model_output = tool_output
             else:
                 if fn_name in ("update_order", "get_order"):
                     result: ToolResult = await tool.target(fn_args, state.session_id)
                 else:
                     result = await tool.target(fn_args)
                 tool_output = result.to_text()
-                destination = result.destination
+                model_output = result.model_output()
 
-                if destination == ToolResultDirection.TO_CLIENT:
+                if result.destination == ToolResultDirection.TO_CLIENT:
                     await client_ws.send_json({
                         "type": "extension.middle_tier_tool_response",
                         "tool_name": fn_name,
@@ -292,7 +292,7 @@ class RTLocalPipeline:
             state.conversation.append({
                 "role": "tool",
                 "tool_call_id": tc_id,
-                "content": tool_output if destination == ToolResultDirection.TO_SERVER else "",
+                "content": model_output,
             })
 
         # Re-call LLM with tool results for final response
@@ -585,7 +585,8 @@ class RTLocalPipeline:
     # ------------------------------------------------------------------
 
     async def _websocket_handler(self, request: web.Request) -> web.WebSocketResponse:
-        ws = web.WebSocketResponse()
+        # Same browser client and aiohttp bug as the cloud path (see rtmt._WS_COMPRESS).
+        ws = web.WebSocketResponse(compress=_WS_COMPRESS)
         await ws.prepare(request)
 
         session_id = order_state_singleton.create_session()

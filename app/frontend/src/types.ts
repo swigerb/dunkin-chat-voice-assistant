@@ -90,6 +90,30 @@ export type ExtensionSessionMetadata = {
     sessionToken: string;
     roundTripIndex: number;
     roundTripToken: string;
+    /** Per-tab credential for resuming this session after a transport drop (docs/order_resume.md). */
+    resumeId?: string;
+};
+
+/** The server re-attached this socket to the held session; the ticket comes back as it was. */
+export type ExtensionSessionResumed = {
+    type: "extension.session_resumed";
+    order_summary: {
+        items: Array<{ item: string; size: string; quantity: number; price: number; display: string }>;
+        total: number;
+        tax: number;
+        finalTotal: number;
+    };
+    session_token: string;
+    round_trip_index: number;
+    round_trip_token: string;
+    /** Rotated credential: the old one is spent. */
+    resume_id: string;
+};
+
+/** The held session could not be resumed; a fresh session (with its own metadata) follows. */
+export type ExtensionResumeRejected = {
+    type: "extension.resume_rejected";
+    reason: "disabled" | "malformed" | "unknown" | "expired" | "not_first_frame" | string;
 };
 
 export type ExtensionRoundTripToken = {
@@ -97,4 +121,11 @@ export type ExtensionRoundTripToken = {
     sessionToken: string;
     roundTripIndex: number;
     roundTripToken: string;
+};
+
+/** The middle tier's rate-limit ladder: attempt 1 = retrying (play the apology clip), final = gave up. */
+export type ExtensionRateLimited = {
+    type: "extension.rate_limited";
+    attempt: number;
+    final?: boolean;
 };

@@ -74,6 +74,12 @@ param openAiResourceGroupName string = ''
 param openAiEndpoint string = ''
 param openAiRealtimeDeployment string = ''
 param openAiRealtimeVoiceChoice string = ''
+@description('Optional reasoning.effort override for gpt-realtime-2.x (none|minimal|low|medium|high|xhigh, or off). Empty = app/backend/config.yaml')
+param openAiRealtimeReasoningEffort string = ''
+@description('Optional: is the realtime deployment a reasoning model (true|false|auto)? Empty = app/backend/config.yaml (auto = infer from the deployment name)')
+param openAiRealtimeReasoningModel string = ''
+@description('Optional input transcription model/deployment override. Empty = app/backend/config.yaml (whisper-1)')
+param openAiRealtimeTranscriptionModel string = ''
 
 @description('Location for the OpenAI resource group')
 @allowed([
@@ -213,7 +219,11 @@ module acaBackend 'core/host/container-app-upsert.bicep' = {
     containerCpuCoreCount: '1.0'
     containerMemory: '2Gi'
     secrets: enableAuth && !empty(authClientSecret) ? { 'aad-client-secret': authClientSecret } : {}
-    env: {
+    // EasyAuth with the client secret set out-of-band: keep it across provisions.
+    preserveExistingSecretNames: enableAuth && empty(authClientSecret) ? [ 'aad-client-secret' ] : []
+    // Orders and the order-resume grace hold are in-process: pin a browser to its replica.
+    stickySessionsAffinity: 'sticky'
+    env: union({
       AZURE_SEARCH_ENDPOINT: reuseExistingSearch
         ? searchEndpoint
         : 'https://${searchService.outputs.name}.search.windows.net'
@@ -234,18 +244,23 @@ module acaBackend 'core/host/container-app-upsert.bicep' = {
       RUNNING_IN_PRODUCTION: 'true'
       // For using managed identity to access Azure resources. See https://github.com/microsoft/azure-container-apps/issues/442
       AZURE_CLIENT_ID: acaIdentity.outputs.clientId
-    }
+    },
+    // Optional overrides of model.reasoning_effort / reasoning_model / transcription_model
+    // in app/backend/config.yaml; unset means the config.yaml value applies.
+    empty(openAiRealtimeReasoningEffort) ? {} : { AZURE_OPENAI_REALTIME_REASONING_EFFORT: openAiRealtimeReasoningEffort },
+    empty(openAiRealtimeReasoningModel) ? {} : { AZURE_OPENAI_REALTIME_REASONING_MODEL: openAiRealtimeReasoningModel },
+    empty(openAiRealtimeTranscriptionModel) ? {} : { AZURE_OPENAI_REALTIME_TRANSCRIPTION_MODEL: openAiRealtimeTranscriptionModel })
   }
 }
 
 var embedModel = 'text-embedding-3-large'
 var openAiDeployments = [
   {
-    name: 'gpt-realtime-1.5'
+    name: 'gpt-realtime-2.1'
     model: {
       format: 'OpenAI'
-      name: 'gpt-realtime-1.5'
-      version: '2026-02-23'
+      name: 'gpt-realtime-2.1'
+      version: '2026-07-07'
     }
     sku: {
       name: 'GlobalStandard'
