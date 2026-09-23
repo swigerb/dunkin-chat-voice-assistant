@@ -1,7 +1,13 @@
 import "./status-message.css";
 import { useTranslation } from "react-i18next";
 
-export type ConnectionNotice = "lost" | null;
+/** "lost": the socket dropped; "idle": the server ended the session after 5 idle minutes. */
+export type ConnectionNotice = "lost" | "idle" | null;
+
+const NOTICE_KEYS: Record<Exclude<ConnectionNotice, null>, string> = {
+    lost: "status.connectionLost",
+    idle: "status.sessionEndedIdle"
+};
 /** "retrying": the apology clip is playing and the middle tier is retrying; "busy": it gave up. */
 export type RateLimitNotice = "retrying" | "busy" | null;
 
@@ -16,7 +22,7 @@ export default function StatusMessage({ isRecording, notice = null, rateLimit = 
     if (!isRecording) {
         return (
             <p className="text mb-4 mt-6 text-sm text-muted-foreground" aria-live="polite">
-                {t(notice === "lost" ? "status.connectionLost" : "status.notRecordingMessage")}
+                {t(notice ? NOTICE_KEYS[notice] : "status.notRecordingMessage")}
             </p>
         );
     }

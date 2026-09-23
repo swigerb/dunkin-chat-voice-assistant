@@ -17,6 +17,7 @@ from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 from config_loader import get_config
 from order_state import SessionIdentifiers, order_state_singleton
+from session_manager import SessionManager
 
 logger = logging.getLogger("coffee-chat")
 
@@ -167,6 +168,9 @@ _MARKER_SESSION_UPDATE = '"session.update"'
 _MARKER_SESSION_UPDATED = '"session.updated"'
 _MARKER_AUDIO_DELTA = '"response.output_audio.delta"'
 _MARKER_AUDIO_DELTA_LEGACY = '"response.audio.delta"'
+_MARKER_AUDIO_APPEND = '"input_audio_buffer.append"'
+_MARKER_SPEECH_STARTED = '"input_audio_buffer.speech_started"'
+_MARKER_TRANSCRIPTION_COMPLETED = '"conversation.item.input_audio_transcription.completed"'
 
 # What the browser's useRealtime.startSession() sends. The middle tier applies
 # the same values itself the moment the upstream socket opens, so a socket the
@@ -578,8 +582,8 @@ class RTMiddleTier:
         self.voice_choice = voice_choice
         self.tools = {}
         self._token_provider = None
-        self._session_map: dict[web.WebSocketResponse, str] = {}
-        self._sent_greeting: set[str] = set()
+        # Socket -> order session, guest activity and the idle close (4000).
+        self._sessions = SessionManager()
         # Flipped if the deployment rejects `reasoning` at runtime despite the
         # name check / switch; from then on it is never sent again.
         self._reasoning_rejected = False
@@ -594,6 +598,14 @@ class RTMiddleTier:
         else:
             self._token_provider = get_bearer_token_provider(credentials, "https://cognitiveservices.azure.com/.default")
             self._token_provider() # Warm up during startup so we have a token cached when the first request arrives
+
+    @property
+    def sessions(self) -> SessionManager:
+        return self._sessions
+
+    @property
+    def _session_map(self) -> dict[web.WebSocketResponse, str]:
+        return self._sessions._session_map
 
     def _reasoning_model(self) -> bool:
         """Whether reasoning-model-only fields may be sent upstream at all.
@@ -934,8 +946,8 @@ class RTMiddleTier:
             # compress=0: Azure OpenAI declines deflate anyway; don't offer it. (aiohttp's
             # current default, pinned so a future default change can't turn it on.)
             async with session.ws_connect("/openai/v1/realtime", headers=headers, params=params, compress=0) as target_ws:
-                session_id = self._session_map.get(ws)
-                greeting_sent = session_id in self._sent_greeting
+                session_id = self._sessions.get_session_id(ws)
+                greeting_sent = self._sessions.has_sent_greeting(session_id)
                 # Per-connection tool call tracking (avoids cross-session interference)
                 tools_pending: dict[str, RTToolCall] = {}
                 # Per-connection session state. GA locks the voice once the
@@ -962,8 +974,7 @@ class RTMiddleTier:
                         logger.warning("No session.updated within %.1fs — greeting anyway (trigger=%s)",
                                        _SESSION_CONFIGURED_TIMEOUT_SEC, trigger)
                     greeting_sent = True
-                    if session_id is not None:
-                        self._sent_greeting.add(session_id)
+                    self._sessions.mark_greeting_sent(session_id)
                     await target_ws.send_json({
                         "type": "conversation.item.create",
                         "item": {
@@ -979,6 +990,12 @@ class RTMiddleTier:
                 async def from_client_to_server():
                     async for msg in ws:
                         if msg.type == aiohttp.WSMsgType.TEXT:
+                            # Guest activity drives the idle clock. Mic frames stream
+                            # constantly (silence included), so they don't count; the
+                            # guest actually speaking does (speech_started/transcripts
+                            # from upstream), and so does any control frame (a tap).
+                            if _MARKER_AUDIO_APPEND not in msg.data:
+                                self._sessions.touch_activity(session_id)
                             # Intercept extension.set_voice — don't forward to OpenAI
                             if _MARKER_SET_VOICE in msg.data:
                                 try:
@@ -1029,6 +1046,8 @@ class RTMiddleTier:
                             elif _MARKER_SESSION_UPDATED in data:
                                 guard.on_session_updated()
                                 session_configured.set()
+                            elif _MARKER_SPEECH_STARTED in data or _MARKER_TRANSCRIPTION_COMPLETED in data:
+                                self._sessions.touch_activity(session_id)
                             new_msg = await self._process_message_to_client(msg, ws, target_ws, tools_pending, guard,
                                                                             recovery)
                             if new_msg is not None:
@@ -1049,26 +1068,34 @@ class RTMiddleTier:
                 finally:
                     if recovery is not None:
                         recovery.cancel("connection closed")
-                    if session_id is not None:
-                        order_state_singleton.delete_session(session_id)
-                        self._sent_greeting.discard(session_id)
-                    # Clean up the session map when the connection is closed
-                    if ws in self._session_map:
-                        del self._session_map[ws]
+                    self._sessions.cleanup_session(ws, session_id, reason=f"client close code={ws.close_code}")
 
     async def _websocket_handler(self, request: web.Request):
         ws = web.WebSocketResponse(compress=_WS_COMPRESS)
         await ws.prepare(request)
-        
-        # Create a new session for each WebSocket connection
-        session_id = order_state_singleton.create_session()
-        self._session_map[ws] = session_id
 
-        await self._forward_messages(ws, client_request_id=request.headers.get("x-ms-client-request-id"))
+        # A new order session for each WebSocket connection.
+        self._sessions.create_session(ws)
+
+        try:
+            await self._forward_messages(ws, client_request_id=request.headers.get("x-ms-client-request-id"))
+        finally:
+            # Covers an upstream connect failure, which never reaches the
+            # forwarder's own cleanup. A no-op if that already ran.
+            self._sessions.cleanup_session(ws, self._sessions.get_session_id(ws),
+                                           reason=f"handler exit code={ws.close_code}")
         return ws
-    
+
+    async def _start_background_tasks(self, _app: web.Application) -> None:
+        self._sessions.start_idle_checker()
+
+    async def _stop_background_tasks(self, _app: web.Application) -> None:
+        await self._sessions.stop_idle_checker()
+
     def attach_to_app(self, app: web.Application, path: str) -> None:
         app.router.add_get(path, self._websocket_handler)
+        app.on_startup.append(self._start_background_tasks)
+        app.on_cleanup.append(self._stop_background_tasks)
 
 
 def configure_realtime_model(rtmt: RTMiddleTier, model_cfg: dict, environ: Any = None) -> RTMiddleTier:

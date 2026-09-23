@@ -11,6 +11,7 @@
         "notRecordingMessage": "Let's order some coffee!",
         "conversationInProgress": "Conversation in progress",
         "connectionLost": "Connection lost. Tap the mic to start a new order.",
+        "sessionEndedIdle": "Your session ended after 5 minutes of inactivity. Tap the mic to start a new order.",
         "rateLimitRetrying": "Sorry, give me just a second…",
         "rateLimitFinal": "We're a little busy — please say that again."
     },

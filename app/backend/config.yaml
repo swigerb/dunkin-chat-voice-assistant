@@ -57,6 +57,15 @@ connection:
   # fixed aiohttp release ships.
   ws_compression: false
 
+security:
+  # Close a voice session after this long without guest activity (the guest
+  # speaking, or a tap/control frame; mic audio frames alone don't count).
+  # Close code 4000 "idle_timeout": the browser does not auto-reconnect, shows a
+  # notice, and the next tap starts a fresh session. The order is deleted.
+  idle_timeout_seconds: 300
+  # How often the idle check runs.
+  idle_check_interval_seconds: 15
+
 resilience:
   # When a model response is rate-limited (shared Azure OpenAI quota), retry it
   # instead of leaving the guest in silence: retry 1 is silent; before retry 2

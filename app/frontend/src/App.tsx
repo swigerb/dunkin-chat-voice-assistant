@@ -148,13 +148,13 @@ function CoffeeApp() {
         enableInputAudioTranscription: true,
         onWebSocketOpen: () => console.log("WebSocket connection opened"),
         onWebSocketClose: () => console.log("WebSocket connection closed"),
-        onConnectionLost: ({ code, reason }) => {
+        onConnectionLost: ({ code, reason, idle }) => {
             console.warn(`WebSocket closed (code=${code}${reason ? `, reason=${reason}` : ""})`);
             if (useAzureSpeechOn) return;
             serverSessionLostRef.current = true;
             const wasActive = isSessionActiveRef.current;
             if (wasActive) void stopConversation();
-            if (wasActive || orderItemCountRef.current > 0) setConnectionNotice("lost");
+            if (wasActive || orderItemCountRef.current > 0) setConnectionNotice(idle ? "idle" : "lost");
         },
         onWebSocketError: event => console.error("WebSocket error:", event),
         onReceivedError: message => console.error("error", message),

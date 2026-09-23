@@ -11,6 +11,7 @@
         "notRecordingMessage": "コーヒーを注文しましょう！",
         "conversationInProgress": "会話が進行中",
         "connectionLost": "接続が切れました。マイクをタップして新しい注文を始めてください。",
+        "sessionEndedIdle": "5分間操作がなかったため、セッションが終了しました。マイクをタップして新しい注文を始めてください。",
         "rateLimitRetrying": "すみません、少々お待ちください…",
         "rateLimitFinal": "ただいま混み合っています。もう一度おっしゃってください。"
     },

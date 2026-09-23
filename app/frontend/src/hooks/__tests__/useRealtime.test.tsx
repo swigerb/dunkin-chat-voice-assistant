@@ -39,8 +39,23 @@ describe("useRealTime connection lifecycle", () => {
 
         act(() => last().options.onClose(closeEvent(1002, "Received frame with non-zero reserved bits")));
 
-        expect(onConnectionLost).toHaveBeenCalledWith({ code: 1002, reason: "Received frame with non-zero reserved bits" });
+        expect(onConnectionLost).toHaveBeenCalledWith({ code: 1002, reason: "Received frame with non-zero reserved bits", idle: false });
         expect(onWebSocketClose).toHaveBeenCalledTimes(1);
+        expect(last().connect).toBe(true);
+    });
+
+    it("parks the socket after an idle close (4000) and re-opens only when asked", () => {
+        const onConnectionLost = vi.fn();
+        const { result } = renderHook(() => useRealTime({ onConnectionLost }));
+
+        expect(last().options.shouldReconnect(closeEvent(4000, "idle_timeout"))).toBe(false);
+        expect(last().options.shouldReconnect(closeEvent(4001))).toBe(true);
+
+        act(() => last().options.onClose(closeEvent(4000, "idle_timeout")));
+        expect(onConnectionLost).toHaveBeenCalledWith({ code: 4000, reason: "idle_timeout", idle: true });
+        expect(last().connect).toBe(false);
+
+        act(() => result.current.reconnect());
         expect(last().connect).toBe(true);
     });
 

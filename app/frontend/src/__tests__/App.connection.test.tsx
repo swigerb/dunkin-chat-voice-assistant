@@ -53,7 +53,7 @@ async function tapMic() {
 
 async function dropSocket(code = 1006) {
     await act(async () => {
-        rt.options.onConnectionLost({ code, reason: "" });
+        rt.options.onConnectionLost({ code, reason: code === 4000 ? "idle_timeout" : "", idle: code === 4000 });
     });
 }
 
@@ -129,6 +129,35 @@ describe("App connection loss", () => {
         await tapMic();
         expect(screen.queryByText("status.connectionLost")).toBeNull();
         expect(screen.getByText("status.notRecordingMessage")).toBeInTheDocument();
+    });
+
+    it("says the session ended for inactivity after an idle close", async () => {
+        render(<App />);
+        await tapMic();
+        await dropSocket(4000);
+
+        expect(mic.stop).toHaveBeenCalledTimes(1);
+        expect(micButton()).toHaveAccessibleName("app.startRecording");
+        expect(screen.getByText("status.sessionEndedIdle")).toBeInTheDocument();
+        expect(screen.queryByText("status.connectionLost")).toBeNull();
+    });
+
+    it("starts a fresh session and order on the tap after an idle close", async () => {
+        render(<App />);
+        await tapMic();
+        await act(async () => {
+            rt.options.onReceivedExtensionMiddleTierToolResponse(orderUpdate("Idle Test Cruller"));
+        });
+        rt.isConnected = false;
+        await dropSocket(4000);
+        expect(screen.getAllByText(/Idle Test Cruller/).length).toBeGreaterThan(0);
+
+        await tapMic();
+
+        expect(rt.reconnect).toHaveBeenCalledTimes(1);
+        expect(screen.queryByText(/Idle Test Cruller/)).toBeNull();
+        expect(screen.queryByText("status.sessionEndedIdle")).toBeNull();
+        expect(rt.startSession).toHaveBeenCalledTimes(2);
     });
 
     it("does not reconnect or clear the order when the socket never dropped", async () => {

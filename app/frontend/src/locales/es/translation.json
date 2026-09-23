@@ -11,6 +11,7 @@
         "notRecordingMessage": "¡Pidamos un café!",
         "conversationInProgress": "Conversación en progreso",
         "connectionLost": "Se perdió la conexión. Toca el micrófono para empezar un nuevo pedido.",
+        "sessionEndedIdle": "Tu sesión terminó tras 5 minutos de inactividad. Toca el micrófono para empezar un nuevo pedido.",
         "rateLimitRetrying": "Perdón, dame un segundito…",
         "rateLimitFinal": "Estamos un poco ocupados. ¿Puedes repetirlo, por favor?"
     },

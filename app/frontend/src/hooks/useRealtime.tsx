@@ -42,7 +42,11 @@ type Parameters = {
     onReceivedError?: (message: Message) => void;
 };
 
-export type ConnectionLostInfo = { code: number; reason: string };
+/** The middle tier closes a session that has been idle for 5 minutes with this code. */
+export const WS_CLOSE_IDLE_TIMEOUT = 4000;
+
+/** `idle`: the server ended the session for inactivity; the socket stays closed until reconnect(). */
+export type ConnectionLostInfo = { code: number; reason: string; idle: boolean };
 
 export default function useRealTime({
     useDirectAoaiApi,
@@ -70,7 +74,8 @@ export default function useRealTime({
         ? `${aoaiEndpointOverride}/openai/v1/realtime?api-key=${aoaiApiKeyOverride}&model=${aoaiModelOverride}`
         : `/realtime`;
 
-    // False once background retries are exhausted; the next mic tap re-opens it.
+    // False once background retries are exhausted or the server idle-closed the
+    // session; the next mic tap re-opens it.
     const [shouldConnect, setShouldConnect] = useState(true);
 
     const { sendJsonMessage, readyState } = useWebSocket(
@@ -78,12 +83,16 @@ export default function useRealTime({
         {
             onOpen: () => onWebSocketOpen?.(),
             onClose: event => {
-                onConnectionLost?.({ code: event.code, reason: event.reason ?? "" });
+                const idle = event.code === WS_CLOSE_IDLE_TIMEOUT;
+                // An idle session is over: park the socket instead of opening an
+                // unused session in the background. The next tap re-opens it.
+                if (idle) setShouldConnect(false);
+                onConnectionLost?.({ code: event.code, reason: event.reason ?? "", idle });
                 onWebSocketClose?.();
             },
             onError: event => onWebSocketError?.(event),
             onMessage: event => onMessageReceived(event),
-            shouldReconnect: () => true,
+            shouldReconnect: event => event.code !== WS_CLOSE_IDLE_TIMEOUT,
             onReconnectStop: () => setShouldConnect(false)
         },
         shouldConnect

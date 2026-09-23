@@ -11,6 +11,7 @@
         "notRecordingMessage": "Commandons un café !",
         "conversationInProgress": "Conversation en cours",
         "connectionLost": "Connexion perdue. Touchez le micro pour commencer une nouvelle commande.",
+        "sessionEndedIdle": "Votre session s'est terminée après 5 minutes d'inactivité. Touchez le micro pour commencer une nouvelle commande.",
         "rateLimitRetrying": "Pardon, juste une petite seconde…",
         "rateLimitFinal": "Nous sommes un peu débordés — pouvez-vous répéter, s'il vous plaît ?"
     },

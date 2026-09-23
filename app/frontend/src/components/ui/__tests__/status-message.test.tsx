@@ -19,6 +19,12 @@ describe("StatusMessage", () => {
         expect(screen.queryByText("status.notRecordingMessage")).toBeNull();
     });
 
+    it("tells the guest the session ended for inactivity", () => {
+        render(<StatusMessage isRecording={false} notice="idle" />);
+        expect(screen.getByText("status.sessionEndedIdle")).toBeInTheDocument();
+        expect(screen.queryByText("status.connectionLost")).toBeNull();
+    });
+
     it("drops the notice once a conversation is running", () => {
         render(<StatusMessage isRecording notice="lost" />);
         expect(screen.getByText("status.conversationInProgress")).toBeInTheDocument();
