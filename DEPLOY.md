@@ -47,6 +47,14 @@ This provisions all infrastructure (Container Apps, AI Search, OpenAI, Storage)
 and deploys the application. The `postprovision` hook automatically sets up the
 search index with menu embeddings.
 
+A later `azd provision` keeps the running image. azd sets
+`SERVICE_BACKEND_RESOURCE_EXISTS=true` after the first deploy, and
+`infra/main.parameters.json` maps it to `webAppExists`. If that variable name
+does not match the `backend` service in `azure.yaml`, `exists` is always false.
+Every provision then resets the app to the `containerapps-helloworld`
+placeholder until the next `azd deploy`. `tests/test_azd_service_wiring.py`
+guards the mapping.
+
 ### Post-deploy realtime smoke check
 
 After `azd deploy` / `azd up`, the `postdeploy` hook runs `scripts/smoke_realtime.py`. The script
