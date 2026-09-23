@@ -1,12 +1,22 @@
 import "./status-message.css";
 import { useTranslation } from "react-i18next";
 
-/** "lost": the socket dropped; "idle": the server ended the session after 5 idle minutes. */
-export type ConnectionNotice = "lost" | "idle" | null;
+/**
+ * "lost": the order is gone (retries exhausted); "idle": the server ended the session after 5 idle
+ * minutes; "reconnecting": a transport drop, resume in flight; "resumed": the order came back;
+ * "tapToResume": it came back but the mic needs a tap; "resumeRejected": the hold was gone;
+ * "superseded": another window took the order over.
+ */
+export type ConnectionNotice = "lost" | "idle" | "reconnecting" | "resumed" | "tapToResume" | "resumeRejected" | "superseded" | null;
 
 const NOTICE_KEYS: Record<Exclude<ConnectionNotice, null>, string> = {
     lost: "status.connectionLost",
-    idle: "status.sessionEndedIdle"
+    idle: "status.sessionEndedIdle",
+    reconnecting: "status.reconnecting",
+    resumed: "status.resumed",
+    tapToResume: "status.resumedTapToContinue",
+    resumeRejected: "status.resumeRejected",
+    superseded: "status.superseded"
 };
 /** "retrying": the apology clip is playing and the middle tier is retrying; "busy": it gave up. */
 export type RateLimitNotice = "retrying" | "busy" | null;
@@ -36,7 +46,7 @@ export default function StatusMessage({ isRecording, notice = null, rateLimit = 
                     ))}
                 </div>
                 <p className="mb-4 ml-2 mt-6 font-semibold text-primary">
-                    {t("status.conversationInProgress")}
+                    {t(notice === "resumed" ? NOTICE_KEYS.resumed : "status.conversationInProgress")}
                 </p>
             </div>
             {rateLimit && (

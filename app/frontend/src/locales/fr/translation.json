@@ -5,7 +5,8 @@
         "showTranscript": "Afficher la transcription",
         "stopRecording": "Arrêter l'enregistrement",
         "startRecording": "Commencer l'enregistrement",
-        "stopConversation": "Arrêter la conversation"
+        "stopConversation": "Arrêter la conversation",
+        "newOrder": "Commencer une nouvelle commande"
     },
     "status": {
         "notRecordingMessage": "Commandons un café !",
@@ -13,7 +14,12 @@
         "connectionLost": "Connexion perdue. Touchez le micro pour commencer une nouvelle commande.",
         "sessionEndedIdle": "Votre session s'est terminée après 5 minutes d'inactivité. Touchez le micro pour commencer une nouvelle commande.",
         "rateLimitRetrying": "Pardon, juste une petite seconde…",
-        "rateLimitFinal": "Nous sommes un peu débordés — pouvez-vous répéter, s'il vous plaît ?"
+        "rateLimitFinal": "Nous sommes un peu débordés — pouvez-vous répéter, s'il vous plaît ?",
+        "reconnecting": "Connexion interrompue. Reconnexion en cours — votre commande est conservée…",
+        "resumed": "Reconnecté — votre commande est toujours là.",
+        "resumedTapToContinue": "Reconnecté — votre commande est toujours là. Touchez le micro pour continuer.",
+        "resumeRejected": "Impossible de récupérer votre commande. Touchez le micro pour en commencer une nouvelle.",
+        "superseded": "Cette commande a continué dans une autre fenêtre. Touchez le micro pour recommencer."
     },
     "history": {
         "transcriptHistory": "Historique de la transcription",
