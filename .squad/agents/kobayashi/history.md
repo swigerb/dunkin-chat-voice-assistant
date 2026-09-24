@@ -4,6 +4,40 @@
 
 - **Project:** Dunkin Voice Chat Assistant — AI-powered drive-thru ordering experience
 
+## Issue #9 — session.updated leaked instructions/tools to the browser (2026-09-24)
+
+**Branch:** `fix/session-updated-leak` (from `dev`)
+
+**Root cause:** `_process_message_to_client`'s match statement scrubbed
+`instructions`/`tools` for `session.created` but had no `case` at all for
+`session.updated`. GA echoes the full session object on both events (the
+only two that do -- audited the full match, and `response.created`/
+`response.done` carry a `response` object, not `session`). `session.updated`
+fires after every accepted session.update, starting with our own bootstrap
+one, so every browser connection got the real system prompt and tool
+schemas readable in devtools.
+
+**Fix:** extracted `_scrub_session_secrets(session)` (module-level helper,
+sets `instructions=""`, `tools=[]`) and called it from both `session.created`
+and a new `session.updated` case. Checked `useRealtime.tsx`'s
+`onMessageReceived` switch — no case for either event type, so the browser
+reads nothing from them; scrub is safe with no frontend follow-up needed.
+
+**Also audited (not applicable):**
+- `rtmt_local.py` (edge pipeline) — builds its own `session.created` payload
+  in-process (already scrubbed) and never sends `session.updated` to the
+  browser at all; no upstream session object to echo.
+- Dashboard publish path (`session_manager.publish_order`, `dashboard.py`) —
+  only ever publishes order summaries, never a session object.
+
+**Verification:** new test `SessionUpdatedLeakTests` in
+`test_session_bootstrap.py`, driven against the real middle tier via the
+existing `FakeGARealtime` harness. Confirmed FAIL pre-fix (real system
+prompt in the assertion diff). Mutation-check: reverted only the new
+`session.updated` case → test failed again identically; restored → passes.
+Full suite 395 passed (394 + 1), ruff clean, frontend 132/132 unchanged.
+Commit `92854e6`, not pushed/merged per task rules.
+
 ## Sprint 4 — Hybrid Local Inference (2026-08-07)
 
 **Branch:** `sprint/local-inference` (from `dev`)

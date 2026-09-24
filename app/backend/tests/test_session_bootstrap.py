@@ -528,6 +528,42 @@ class SessionUpdateFallbackTests(_RealtimeHarness):
         await browser.close()
 
 
+class SessionUpdatedLeakTests(_RealtimeHarness):
+    """swigerb/dunkin-chat-voice-assistant#9: session.created is scrubbed of
+    `instructions` / `tools` before relaying to the browser, but
+    session.updated -- sent by upstream after every accepted session.update,
+    starting with our own bootstrap one -- was relayed unchanged. Every
+    browser connection therefore received the full system prompt and all
+    tool schemas, readable in devtools on the deployed demo."""
+
+    async def test_session_updated_does_not_leak_instructions_or_tools(self):
+        browser = await self.client.ws_connect("/realtime")
+        # The bootstrap session.update (sent before any browser frame) is
+        # acknowledged with a session.updated that already carries the real
+        # instructions/tools in the fake upstream -- exactly what a browser
+        # would see from the real service.
+        events = await self._browser_events(browser, duration=1.0)
+        bootstrap_updates = [e for e in events if e["type"] == "session.updated"]
+        self.assertTrue(bootstrap_updates, "no session.updated reached the browser")
+
+        # A second session.updated (for the browser's own session.update) must
+        # be scrubbed identically. Use _browser_events (not _response_done),
+        # which would otherwise discard the session.updated while draining
+        # frames looking for response.done.
+        await browser.send_json(BROWSER_SESSION_UPDATE)
+        more_events = await self._browser_events(browser, duration=2.0)
+        all_updates = bootstrap_updates + [e for e in more_events if e["type"] == "session.updated"]
+        self.assertGreaterEqual(len(all_updates), 2, "expected a session.updated for the browser's update too")
+
+        for event in all_updates:
+            session = event["session"]
+            self.assertEqual(session.get("instructions"), "",
+                             "session.updated leaked the system prompt to the browser")
+            self.assertEqual(session.get("tools"), [],
+                             "session.updated leaked tool schemas to the browser")
+        await browser.close()
+
+
 class UpstreamErrorLoggingTests(unittest.IsolatedAsyncioTestCase):
     """Errors that are not ours to recover are logged, not swallowed."""
 
