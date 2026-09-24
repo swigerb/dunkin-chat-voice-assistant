@@ -7,6 +7,23 @@
 - **Existing tests:** app/backend/tests/test_order_state.py, app/backend/tests/test_extras_rules.py
 - **Frontend coverage scoped to:** order-summary.tsx, status-message.tsx (in vite.config.ts)
 
+## Issue #9 — session.updated leak regression test (2026-09-24)
+
+Added `SessionUpdatedLeakTests` to `app/backend/tests/test_session_bootstrap.py`
+(paired with Kobayashi's rtmt.py fix on `fix/session-updated-leak`). Reused
+the existing `_RealtimeHarness`/`FakeGARealtime` fake-upstream harness rather
+than a new one — it already echoes `instructions`/`tools` on `session.updated`
+exactly like the real GA service does, so no harness changes were needed.
+
+Gotcha: `_response_done` drains every frame until `response.done`, which
+silently swallows the intervening `session.updated` — had to use
+`_browser_events(browser, duration=2.0)` instead to actually observe it.
+
+Confirmed the test fails pre-fix (real system prompt in the diff) and after
+a mutation-check revert of just the `session.updated` case (fails
+identically); passes with the fix in place. 395 passed total (394 baseline
++ 1), ruff clean, frontend 132/132 unchanged.
+
 ## Learnings
 - Backend tests require `pip install -r requirements.txt` for azure SDK deps (azure.identity, azure.search.documents)
 - `_get_bool_env` in app.py is importable independently but triggers full module import chain; keep azure deps installed
