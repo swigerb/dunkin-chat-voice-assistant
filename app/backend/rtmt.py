@@ -164,6 +164,19 @@ def _to_ga_session(session: dict) -> dict:
 
     return ga
 
+
+# Server events that echo the full session object back to us. Per the GA
+# event list these are the only two: session.created on connect, and
+# session.updated after every accepted session.update. Both carry the live
+# `instructions` (system prompt) and `tools` (function schemas) -- server
+# secrets that must never reach the browser, which can inspect any WS frame
+# in devtools. Both cases must be scrubbed identically, hence one helper.
+def _scrub_session_secrets(session: dict) -> None:
+    """Strip the system prompt and tool schemas from an echoed session object, in place."""
+    session["instructions"] = ""
+    session["tools"] = []
+
+
 # Valid voices for the GA realtime API.
 _VALID_VOICES = frozenset({
     "alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"
@@ -853,8 +866,7 @@ class RTMiddleTier:
                     session = message["session"]
                     # Hide the instructions, tools and max tokens from clients, if we ever allow client-side 
                     # tools, this will need updating
-                    session["instructions"] = ""
-                    session["tools"] = []
+                    _scrub_session_secrets(session)
                     session["voice"] = self.voice_choice
                     session["tool_choice"] = "none"
                     session["max_response_output_tokens"] = None
@@ -866,6 +878,15 @@ class RTMiddleTier:
                     elif session_id is not None:
                         identifiers = order_state_singleton.get_session_identifiers(session_id)
                         await self._emit_session_identifiers(client_ws, "extension.session_metadata", identifiers)
+
+                case "session.updated":
+                    # Every accepted session.update (ours or the browser's) is
+                    # echoed back by upstream with the FULL session object --
+                    # same secrets as session.created, same scrub required.
+                    session = message.get("session")
+                    if session is not None:
+                        _scrub_session_secrets(session)
+                        updated_message = json.dumps(message)
 
                 case "response.output_item.added":
                     if "item" in message and message["item"]["type"] == "function_call":
